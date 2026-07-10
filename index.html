@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bud & Brush</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- LOGIN OVERLAY -->
+    <div id="loginOverlay">
+      <div class="login-card">
+        <div class="login-header">
+          <h1>🌿 Bud & Brush</h1>
+          <p>Admin access only</p>
+        </div>
+        <div class="login-body">
+          <input
+            id="loginPassword"
+            class="form-control"
+            type="password"
+            placeholder="Enter admin password"
+          />
+          <button id="loginBtn" class="btn btn-primary w-100 mt-3">
+            Unlock
+          </button>
+          <div id="loginError" class="login-error d-none">
+            Incorrect password. Please try again.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div class="app-shell" id="appShell" style="display: none">
+      <header class="topbar">
+        <div>
+          <h1>Bud & Brush</h1>
+        </div>
+        <div class="topbar-actions">
+          <div id="syncStatus" class="sync-status">Preparing data…</div>
+          <div class="tab-nav" role="tablist" aria-label="Store sections">
+            <button class="tab-btn active" data-view="pos">Home</button>
+            <button class="tab-btn" data-view="inventory">Stock</button>
+            <button class="tab-btn" data-view="sales">Contributions</button>
+            <button class="tab-btn" data-view="dashboard">Dashboard</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="container py-4">
+        <!-- POS View -->
+        <section id="pos-view" class="view-pane active">
+          <div class="row g-4">
+            <div class="col-lg-8">
+              <div class="card p-3">
+                <div
+                  class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3"
+                >
+                  <div>
+                    <h3 class="mb-1">Items</h3>
+                    <p class="text-muted small mb-0">
+                      Search items and tap to add them to the cart.
+                    </p>
+                  </div>
+                  <input
+                    id="productSearch"
+                    class="form-control search-input"
+                    placeholder="Search items"
+                  />
+                </div>
+                <div id="productGrid" class="product-grid"></div>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <div class="card p-3 sticky-card">
+                <div
+                  class="d-flex justify-content-between align-items-center mb-3"
+                >
+                  <div>
+                    <h3 class="mb-1">Cart</h3>
+                    <p id="cartCount" class="text-muted small mb-0">0 items</p>
+                  </div>
+                  <span class="badge bg-success-subtle text-success"
+                    >Bundle pricing</span
+                  >
+                </div>
+                <div id="cartItems" class="cart-list"></div>
+                <div class="cart-summary">
+                  <div class="d-flex justify-content-between">
+                    <span>Subtotal</span><strong id="cartSubtotal">0.00</strong>
+                  </div>
+                  <label class="form-label mt-3">Donation method</label>
+                  <select id="paymentMethod" class="form-select">
+                    <option value="Cash">Cash</option>
+                    <option value="Yoco">Yoco</option>
+                    <option value="EFT">EFT</option>
+                  </select>
+                  <button id="checkoutBtn" class="btn btn-success w-100 mt-3">
+                    Record contribution
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Inventory View -->
+        <section id="inventory-view" class="view-pane">
+          <div class="row g-4">
+            <div class="col-lg-7">
+              <div class="card p-3">
+                <div
+                  class="d-flex justify-content-between align-items-center mb-3"
+                >
+                  <div>
+                    <h3 class="mb-1">Stock</h3>
+                    <p class="text-muted small mb-0">
+                      Adjust stock, prices, and item details.
+                    </p>
+                  </div>
+                  <button
+                    id="newProductBtn"
+                    class="btn btn-outline-primary btn-sm"
+                  >
+                    New item
+                  </button>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Status</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="inventoryTable"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <div class="card p-3">
+                <h3 class="mb-3">Edit item</h3>
+                <form id="productForm">
+                  <input type="hidden" id="productId" />
+                  <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <input id="productName" class="form-control" required />
+                  </div>
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label class="form-label">Category</label>
+                      <input
+                        id="productCategory"
+                        class="form-control"
+                        required
+                      />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Type</label>
+                      <input id="productType" class="form-control" required />
+                    </div>
+                  </div>
+                  <div class="row g-3 mt-1">
+                    <div class="col-md-6">
+                      <label class="form-label">Price</label>
+                      <input
+                        id="productPrice"
+                        type="number"
+                        step="0.01"
+                        class="form-control"
+                        required
+                      />
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Stock</label>
+                      <input
+                        id="productStock"
+                        type="number"
+                        min="0"
+                        class="form-control"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div class="d-flex gap-2 mt-4">
+                    <button type="submit" class="btn btn-success">Save</button>
+                    <button
+                      type="button"
+                      id="resetProductForm"
+                      class="btn btn-outline-secondary"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Sales View -->
+        <section id="sales-view" class="view-pane">
+          <div class="card p-3">
+            <div
+              class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3"
+            >
+              <div>
+                <h3 class="mb-1">Contributions history</h3>
+                <p class="text-muted small mb-0">
+                  Filter by donation method or item and export the current view.
+                </p>
+              </div>
+              <div
+                class="d-flex gap-2 flex-wrap align-items-center sales-controls"
+              >
+                <input
+                  id="salesSearch"
+                  class="form-control search-input"
+                  placeholder="Search contributions"
+                />
+                <select
+                  id="salesPaymentFilter"
+                  class="form-select filter-select"
+                >
+                  <option value="all">All</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Yoco">Yoco</option>
+                  <option value="EFT">EFT</option>
+                </select>
+                <button id="exportSalesBtn" class="btn btn-outline-primary">
+                  Export CSV
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>Donation</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="salesHistoryTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Dashboard View -->
+        <section id="dashboard-view" class="view-pane">
+          <div class="row g-4 mb-4">
+            <div class="col-md-6 col-xl-3">
+              <div class="dash-card revenue p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <span class="dash-label">Total</span>
+                  <i class="fas fa-chart-line"></i>
+                </div>
+                <h2 id="dashboardRevenue">0.00</h2>
+              </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+              <div class="dash-card cash p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <span class="dash-label">Cash</span>
+                  <i class="fas fa-coins"></i>
+                </div>
+                <h2 id="dashboardCash">0.00</h2>
+              </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+              <div class="dash-card yoco p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <span class="dash-label">Yoco</span>
+                  <i class="fas fa-credit-card"></i>
+                </div>
+                <h2 id="dashboardYoco">0.00</h2>
+              </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+              <div class="dash-card lowstock p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <span class="dash-label">EFT</span>
+                  <i class="fas fa-file-invoice-dollar"></i>
+                </div>
+                <h2 id="dashboardEftSales">0.00</h2>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3 mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h3 class="mb-0">Daily totals</h3>
+              <span class="text-muted small">Last 7 days</span>
+            </div>
+            <div id="dailyRevenueChart" class="daily-chart"></div>
+          </div>
+
+          <div class="row g-4">
+            <div class="col-lg-7">
+              <div class="card p-3">
+                <h3 class="mb-3">Donation breakdown</h3>
+                <div id="paymentBreakdown"></div>
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <div class="card p-3">
+                <h3 class="mb-3">Most popular</h3>
+                <div id="topProductsList"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3 mt-4">
+            <h3 class="mb-3">Stock alerts</h3>
+            <div id="stockAlertsList"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Dexie.js - Using multiple CDN fallbacks -->
+    <script>
+      // Load Dexie from CDN with fallback
+      function loadDexie() {
+        return new Promise((resolve, reject) => {
+          // Try multiple CDN sources
+          const cdnUrls = [
+            "https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js",
+            "https://unpkg.com/dexie@3.2.4/dist/dexie.min.js",
+            "https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js",
+          ];
+
+          let loaded = false;
+
+          function tryLoad(index) {
+            if (index >= cdnUrls.length) {
+              reject(new Error("Failed to load Dexie from all CDN sources"));
+              return;
+            }
+
+            const script = document.createElement("script");
+            script.src = cdnUrls[index];
+            script.async = true;
+
+            script.onload = function () {
+              if (typeof Dexie !== "undefined") {
+                loaded = true;
+                resolve();
+              } else {
+                tryLoad(index + 1);
+              }
+            };
+
+            script.onerror = function () {
+              tryLoad(index + 1);
+            };
+
+            document.head.appendChild(script);
+          }
+
+          // Check if Dexie is already loaded
+          if (typeof Dexie !== "undefined") {
+            resolve();
+            return;
+          }
+
+          tryLoad(0);
+        });
+      }
+
+      // Store the load promise globally
+      window.dexieLoadPromise = loadDexie();
+    </script>
+    <script src="script.js"></script>
+  </body>
+</html>
