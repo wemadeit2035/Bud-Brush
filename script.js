@@ -5,6 +5,7 @@
 // ----- CONFIGURATION -----
 const ADMIN_PASSWORD = "B&B420";
 const SESSION_KEY_AUTH = "bb_auth";
+const PETTY_CASH_START = 100;
 
 // ----- STATE -----
 let products = [];
@@ -28,7 +29,6 @@ const defaultProducts = [
       { qty: 5, price: 150 },
       { qty: 3, price: 90 },
     ],
-    specials: [],
   },
   {
     id: "2",
@@ -38,7 +38,6 @@ const defaultProducts = [
     price: 40,
     stock: 50,
     bundles: [{ qty: 3, price: 100 }],
-    specials: [],
   },
   {
     id: "3",
@@ -48,7 +47,6 @@ const defaultProducts = [
     price: 60,
     stock: 50,
     bundles: [],
-    specials: [],
   },
   {
     id: "4",
@@ -58,7 +56,6 @@ const defaultProducts = [
     price: 70,
     stock: 50,
     bundles: [{ qty: 3, price: 150 }],
-    specials: [],
   },
   {
     id: "5",
@@ -68,7 +65,6 @@ const defaultProducts = [
     price: 70,
     stock: 50,
     bundles: [{ qty: 3, price: 150 }],
-    specials: [],
   },
   {
     id: "6",
@@ -78,7 +74,6 @@ const defaultProducts = [
     price: 90,
     stock: 50,
     bundles: [],
-    specials: [],
   },
   {
     id: "7",
@@ -88,7 +83,6 @@ const defaultProducts = [
     price: 100,
     stock: 50,
     bundles: [],
-    specials: [],
   },
   {
     id: "8",
@@ -98,7 +92,6 @@ const defaultProducts = [
     price: 120,
     stock: 50,
     bundles: [],
-    specials: [],
   },
   {
     id: "9",
@@ -108,7 +101,6 @@ const defaultProducts = [
     price: 130,
     stock: 50,
     bundles: [],
-    specials: [],
   },
   {
     id: "10",
@@ -118,7 +110,6 @@ const defaultProducts = [
     price: 50,
     stock: 50,
     bundles: [],
-    specials: [{ qty: 5, price: 200 }],
   },
   {
     id: "11",
@@ -128,7 +119,6 @@ const defaultProducts = [
     price: 70,
     stock: 50,
     bundles: [],
-    specials: [{ qty: 5, price: 250 }],
   },
   {
     id: "12",
@@ -138,7 +128,6 @@ const defaultProducts = [
     price: 80,
     stock: 50,
     bundles: [],
-    specials: [{ qty: 5, price: 300 }],
   },
   {
     id: "13",
@@ -148,7 +137,6 @@ const defaultProducts = [
     price: 150,
     stock: 50,
     bundles: [],
-    specials: [],
   },
   {
     id: "14",
@@ -158,7 +146,6 @@ const defaultProducts = [
     price: 130,
     stock: 50,
     bundles: [],
-    specials: [],
   },
   {
     id: "15",
@@ -168,7 +155,6 @@ const defaultProducts = [
     price: 160,
     stock: 50,
     bundles: [],
-    specials: [{ qty: 5, price: 650 }],
   },
   {
     id: "16",
@@ -178,7 +164,6 @@ const defaultProducts = [
     price: 160,
     stock: 50,
     bundles: [],
-    specials: [{ qty: 5, price: 650 }],
   },
   {
     id: "17",
@@ -188,7 +173,6 @@ const defaultProducts = [
     price: 160,
     stock: 50,
     bundles: [],
-    specials: [{ qty: 5, price: 650 }],
   },
 ];
 
@@ -201,17 +185,17 @@ class BudAndBrushDB {
       }
 
       this.db = new Dexie("BudAndBrushDB");
-      this.db.version(1).stores({
+      this.db.version(2).stores({
         products: "id, name, category, type, stock, price",
         sales:
           "id, productId, productName, quantity, price, payment, total, date",
       });
 
-      // Add indexes for faster queries
+      // Add hooks for data validation
       this.db.products.hook("creating", function (primKey, obj) {
-        // Ensure all fields are properly typed
         obj.price = Number(obj.price) || 0;
         obj.stock = Number(obj.stock) || 0;
+        obj.bundles = obj.bundles || [];
         return obj;
       });
 
@@ -261,9 +245,9 @@ class BudAndBrushDB {
 
   async saveProduct(product) {
     try {
-      // Ensure numeric fields are numbers
       product.price = Number(product.price) || 0;
       product.stock = Number(product.stock) || 0;
+      product.bundles = product.bundles || [];
       return await this.db.products.put(product);
     } catch (error) {
       console.error("Error saving product:", error);
@@ -273,11 +257,11 @@ class BudAndBrushDB {
 
   async saveProducts(products) {
     try {
-      // Ensure all products have numeric fields
       products = products.map((p) => ({
         ...p,
         price: Number(p.price) || 0,
         stock: Number(p.stock) || 0,
+        bundles: p.bundles || [],
       }));
       return await this.db.products.bulkPut(products);
     } catch (error) {
@@ -297,7 +281,6 @@ class BudAndBrushDB {
 
   async searchProducts(query) {
     if (!query) return await this.getAllProducts();
-
     try {
       const lowerQuery = query.toLowerCase();
       return await this.db.products
@@ -356,7 +339,6 @@ class BudAndBrushDB {
 
   async saveSale(sale) {
     try {
-      // Ensure numeric fields are numbers
       sale.quantity = Number(sale.quantity) || 0;
       sale.price = Number(sale.price) || 0;
       sale.total = Number(sale.total) || 0;
@@ -369,7 +351,6 @@ class BudAndBrushDB {
 
   async saveSales(sales) {
     try {
-      // Ensure all sales have numeric fields
       sales = sales.map((s) => ({
         ...s,
         quantity: Number(s.quantity) || 0,
@@ -491,7 +472,7 @@ class BudAndBrushDB {
         products,
         sales,
         exportedAt: new Date().toISOString(),
-        version: "1.0",
+        version: "2.0",
       };
     } catch (error) {
       console.error("Error exporting data:", error);
@@ -545,12 +526,10 @@ let database = null;
 
 async function initDatabase() {
   try {
-    // Wait for Dexie to load
     if (window.dexieLoadPromise) {
       await window.dexieLoadPromise;
     }
 
-    // Check if Dexie is available
     if (typeof Dexie === "undefined") {
       throw new Error("Dexie library not available after loading");
     }
@@ -562,7 +541,6 @@ async function initDatabase() {
       throw new Error("Failed to open database");
     }
 
-    // Check if products exist, if not load defaults
     const existingProducts = await database.getAllProducts();
     if (existingProducts.length === 0) {
       await database.saveProducts(defaultProducts);
@@ -585,7 +563,6 @@ function normalizeProduct(p) {
     price: Number(p.price || 0),
     stock: Number(p.stock || 0),
     bundles: p.bundles || [],
-    specials: p.specials || [],
   };
 }
 
@@ -637,7 +614,7 @@ function calculatePrice(product, quantity) {
   if (!product || quantity <= 0) return 0;
   const unitPrice = Number(product.price) || 0;
   let best = unitPrice * quantity;
-  const rules = [...(product.bundles || []), ...(product.specials || [])];
+  const rules = product.bundles || [];
   rules.forEach((rule) => {
     if (!rule || rule.qty <= 0) return;
     const count = Math.floor(quantity / rule.qty);
@@ -651,11 +628,9 @@ function calculatePrice(product, quantity) {
 // ----- LOAD DATA FROM DATABASE -----
 async function loadData() {
   try {
-    // Load products
     const dbProducts = await database.getAllProducts();
     products = dbProducts.map(normalizeProduct).filter(Boolean);
 
-    // Load sales
     const dbSales = await database.getAllSales();
     sales = dbSales.map(normalizeSale).filter(Boolean);
 
@@ -748,12 +723,22 @@ function renderCart() {
     .map((item) => {
       const product = getProductById(item.productId);
       if (!product) return "";
-      const total = calculatePrice(product, item.quantity);
+
+      // Get the current price from the item or default to calculated price
+      const currentPrice =
+        item.customPrice !== undefined
+          ? item.customPrice
+          : calculatePrice(product, item.quantity);
+      const total = currentPrice;
       subtotal += total;
+
       return `
-      <div class="cart-item">
+      <div class="cart-item" data-product-id="${product.id}">
         <div class="d-flex justify-content-between align-items-start">
-          <div><strong>${product.name}</strong><div class="meta small">${product.bundles?.length || product.specials?.length ? "Bundle pricing applied" : "Standard pricing"}</div></div>
+          <div>
+            <strong>${product.name}</strong>
+            <div class="meta small">${product.bundles?.length ? "Bundle pricing available" : "Standard pricing"}</div>
+          </div>
           <button class="btn btn-link text-danger p-0" data-remove="${product.id}">Remove</button>
         </div>
         <div class="qty-controls">
@@ -761,9 +746,22 @@ function renderCart() {
           <span class="fw-semibold">${item.quantity}</span>
           <button class="qty-btn" data-update="${product.id}" data-delta="1">+</button>
         </div>
-        <div class="d-flex justify-content-between mt-2">
+        <div class="d-flex justify-content-between mt-2 align-items-center">
           <span class="small text-muted">${currency(product.price)} each</span>
-          <strong>${currency(total)}</strong>
+          <div class="price-edit-group">
+            <span class="currency-symbol">R</span>
+            <input type="number" 
+                   class="cart-price-input" 
+                   data-product-id="${product.id}"
+                   step="0.01" 
+                   min="0"
+                   value="${currency(currentPrice)}"
+                   placeholder="0.00"
+            />
+            <button class="btn btn-link text-primary p-0 reset-price-btn" data-product-id="${product.id}" title="Reset to default price">
+              <i class="fas fa-undo-alt"></i>
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -773,6 +771,7 @@ function renderCart() {
   subtotalEl.textContent = currency(subtotal);
   countEl.textContent = `${cart.reduce((s, i) => s + i.quantity, 0)} items`;
 
+  // Event listeners for remove buttons
   list.querySelectorAll("[data-remove]").forEach((btn) => {
     btn.addEventListener("click", () => {
       cart = cart.filter((i) => String(i.productId) !== btn.dataset.remove);
@@ -780,6 +779,7 @@ function renderCart() {
     });
   });
 
+  // Event listeners for quantity updates
   list.querySelectorAll("[data-update]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.update;
@@ -787,12 +787,76 @@ function renderCart() {
       const item = cart.find((i) => String(i.productId) === id);
       if (item) {
         item.quantity += delta;
-        if (item.quantity <= 0)
+        if (item.quantity <= 0) {
           cart = cart.filter((i) => String(i.productId) !== id);
+        } else {
+          // If quantity changes, adjust custom price proportionally
+          const product = getProductById(id);
+          if (product) {
+            const defaultPrice = calculatePrice(product, item.quantity);
+            if (item.customPrice !== undefined) {
+              const oldQuantity = item.quantity - delta;
+              const oldPrice = item.customPrice;
+              if (oldQuantity > 0) {
+                const perUnitPrice = oldPrice / oldQuantity;
+                item.customPrice = perUnitPrice * item.quantity;
+              } else {
+                item.customPrice = defaultPrice;
+              }
+            }
+          }
+        }
         renderCart();
       }
     });
   });
+
+  // Event listeners for price inputs
+  list.querySelectorAll(".cart-price-input").forEach((input) => {
+    input.addEventListener("input", function () {
+      const productId = this.dataset.productId;
+      const value = parseFloat(this.value);
+      const item = cart.find((i) => String(i.productId) === productId);
+      if (item && !isNaN(value) && value >= 0) {
+        item.customPrice = value;
+        updateCartSubtotal();
+      }
+    });
+
+    // Focus and select all text on click
+    input.addEventListener("focus", function () {
+      this.select();
+    });
+  });
+
+  // Event listeners for reset price buttons
+  list.querySelectorAll(".reset-price-btn").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const productId = this.dataset.productId;
+      const item = cart.find((i) => String(i.productId) === productId);
+      const product = getProductById(productId);
+      if (item && product) {
+        delete item.customPrice;
+        renderCart();
+      }
+    });
+  });
+}
+
+// Helper function to update subtotal without re-rendering
+function updateCartSubtotal() {
+  let subtotal = 0;
+  cart.forEach((item) => {
+    const product = getProductById(item.productId);
+    if (product) {
+      const price =
+        item.customPrice !== undefined
+          ? item.customPrice
+          : calculatePrice(product, item.quantity);
+      subtotal += price;
+    }
+  });
+  document.getElementById("cartSubtotal").textContent = currency(subtotal);
 }
 
 function renderInventoryTable() {
@@ -851,18 +915,20 @@ function renderSalesHistory() {
     .slice()
     .reverse()
     .map((s) => {
-      const badge =
+      const badgeClass =
         s.payment === "Cash"
-          ? "<span class='badge-cash'>Cash</span>"
+          ? "badge-cash"
           : s.payment === "Yoco"
-            ? "<span class='badge-yoco'>Yoco</span>"
-            : "<span class='badge-eft'>EFT</span>";
+            ? "badge-yoco"
+            : s.payment === "Uberzol"
+              ? "badge-uberzol"
+              : "badge-eft";
       return `
       <tr>
         <td>${new Date(s.date).toLocaleString()}</td>
         <td>${s.productName}</td>
         <td>${s.quantity}</td>
-        <td>${badge}</td>
+        <td><span class="${badgeClass}">${s.payment}</span></td>
         <td>${currency(s.total)}</td>
       </tr>
     `;
@@ -881,29 +947,38 @@ function renderDashboard() {
   const eft = sales
     .filter((s) => s.payment === "EFT")
     .reduce((s, sale) => s + Number(sale.total || 0), 0);
+  const uberzol = sales
+    .filter((s) => s.payment === "Uberzol")
+    .reduce((s, sale) => s + Number(sale.total || 0), 0);
 
   document.getElementById("dashboardRevenue").textContent = currency(revenue);
   document.getElementById("dashboardCash").textContent = currency(cash);
   document.getElementById("dashboardYoco").textContent = currency(yoco);
   document.getElementById("dashboardEftSales").textContent = currency(eft);
+  document.getElementById("dashboardUberzol").textContent = currency(uberzol);
 
   // Payment breakdown
   const breakdown = [
     { label: "Cash", value: cash, total: revenue },
     { label: "Yoco", value: yoco, total: revenue },
     { label: "EFT", value: eft, total: revenue },
+    { label: "Uberzol", value: uberzol, total: revenue },
   ];
-  document.getElementById("paymentBreakdown").innerHTML = breakdown
-    .map((entry) => {
-      const pct = revenue ? ((entry.value / revenue) * 100).toFixed(1) : 0;
-      return `
-      <div class="payment-bar">
-        <div class="d-flex justify-content-between"><strong>${entry.label}</strong><span>${currency(entry.value)} · ${pct}%</span></div>
-        <div class="bar"><span style="width:${pct}%"></span></div>
-      </div>
-    `;
-    })
-    .join("");
+
+  const breakdownContainer = document.getElementById("paymentBreakdown");
+  if (breakdownContainer) {
+    breakdownContainer.innerHTML = breakdown
+      .map((entry) => {
+        const pct = revenue ? ((entry.value / revenue) * 100).toFixed(1) : 0;
+        return `
+        <div class="payment-bar">
+          <div class="d-flex justify-content-between"><strong>${entry.label}</strong><span>${currency(entry.value)} · ${pct}%</span></div>
+          <div class="bar"><span style="width:${pct}%"></span></div>
+        </div>
+      `;
+      })
+      .join("");
+  }
 
   // Top products
   const salesByProduct = products
@@ -916,29 +991,34 @@ function renderDashboard() {
     .sort((a, b) => b.units - a.units)
     .slice(0, 5);
 
-  document.getElementById("topProductsList").innerHTML = salesByProduct.some(
-    (i) => i.units > 0,
-  )
-    ? salesByProduct
-        .map(
-          (i) =>
-            `<div class="d-flex justify-content-between py-2 border-bottom"><span>${i.name}</span><strong>${i.units} contributed</strong></div>`,
-        )
-        .join("")
-    : '<div class="empty-state">No contributions recorded yet.</div>';
+  const topProductsList = document.getElementById("topProductsList");
+  if (topProductsList) {
+    topProductsList.innerHTML = salesByProduct.some((i) => i.units > 0)
+      ? salesByProduct
+          .map(
+            (i) =>
+              `<div class="d-flex justify-content-between py-2 border-bottom"><span>${i.name}</span><strong>${i.units} contributed</strong></div>`,
+          )
+          .join("")
+      : '<div class="empty-state">No contributions recorded yet.</div>';
+  }
 
   // Stock alerts
   const low = products
     .filter((p) => p.stock < 10)
     .sort((a, b) => a.stock - b.stock);
-  document.getElementById("stockAlertsList").innerHTML = low.length
-    ? low
-        .map(
-          (p) =>
-            `<div class="d-flex justify-content-between py-2 border-bottom"><span>${p.name}</span><strong>${p.stock} left</strong></div>`,
-        )
-        .join("")
-    : '<div class="empty-state">All items are comfortably stocked.</div>';
+
+  const stockAlertsList = document.getElementById("stockAlertsList");
+  if (stockAlertsList) {
+    stockAlertsList.innerHTML = low.length
+      ? low
+          .map(
+            (p) =>
+              `<div class="d-flex justify-content-between py-2 border-bottom"><span>${p.name}</span><strong>${p.stock} left</strong></div>`,
+          )
+          .join("")
+      : '<div class="empty-state">All items are comfortably stocked.</div>';
+  }
 
   renderDailyRevenueChart();
 }
@@ -963,6 +1043,13 @@ function renderDailyRevenueChart() {
   }
 
   const max = Math.max(...totals, 1);
+
+  if (totals.every((t) => t === 0)) {
+    container.innerHTML =
+      '<div class="empty-state">No sales data for the last 7 days</div>';
+    return;
+  }
+
   container.innerHTML = `
     <div class="daily-chart-bars">
       ${totals
@@ -988,6 +1075,7 @@ function renderAll() {
   renderInventoryTable();
   renderSalesHistory();
   renderDashboard();
+  updateCategoryTypeLists();
 }
 
 // ----- CART ACTIONS -----
@@ -1021,6 +1109,13 @@ async function checkout() {
       return;
     }
     product.stock -= item.quantity;
+
+    // Use custom price if set, otherwise calculate with bundles
+    const total =
+      item.customPrice !== undefined
+        ? item.customPrice
+        : calculatePrice(product, item.quantity);
+
     newSales.push({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       productId: String(product.id),
@@ -1028,7 +1123,7 @@ async function checkout() {
       quantity: item.quantity,
       price: product.price,
       payment,
-      total: calculatePrice(product, item.quantity),
+      total: total,
       date: new Date().toISOString(),
     });
   }
@@ -1055,6 +1150,15 @@ function resetProductForm() {
   document.getElementById("productForm").reset();
   document.getElementById("productId").value = "";
   document.getElementById("productName").focus();
+  const container = document.getElementById("bundlesContainer");
+  container.innerHTML = `
+    <div class="bundle-input-group d-flex gap-2 mb-2">
+      <input type="number" class="form-control bundle-qty" placeholder="Qty" min="1" />
+      <input type="number" class="form-control bundle-price" placeholder="Price" step="0.01" />
+      <button type="button" class="btn btn-outline-danger remove-bundle-btn">×</button>
+    </div>
+  `;
+  updateBundleRemoveButtons();
 }
 
 function editProduct(id) {
@@ -1066,7 +1170,77 @@ function editProduct(id) {
   document.getElementById("productType").value = p.type;
   document.getElementById("productPrice").value = p.price;
   document.getElementById("productStock").value = p.stock;
+
+  const container = document.getElementById("bundlesContainer");
+  container.innerHTML = "";
+  if (p.bundles && p.bundles.length > 0) {
+    p.bundles.forEach((bundle) => {
+      addBundleInput(bundle.qty, bundle.price);
+    });
+  } else {
+    addBundleInput();
+  }
+  updateBundleRemoveButtons();
   switchView("inventory");
+}
+
+function addBundleInput(qty = "", price = "") {
+  const container = document.getElementById("bundlesContainer");
+  const div = document.createElement("div");
+  div.className = "bundle-input-group d-flex gap-2 mb-2";
+  div.innerHTML = `
+    <input type="number" class="form-control bundle-qty" placeholder="Qty" min="1" value="${qty}" />
+    <input type="number" class="form-control bundle-price" placeholder="Price" step="0.01" value="${price}" />
+    <button type="button" class="btn btn-outline-danger remove-bundle-btn">×</button>
+  `;
+  container.appendChild(div);
+  updateBundleRemoveButtons();
+}
+
+function updateBundleRemoveButtons() {
+  document.querySelectorAll(".remove-bundle-btn").forEach((btn) => {
+    btn.removeEventListener("click", handleBundleRemove);
+    btn.addEventListener("click", handleBundleRemove);
+  });
+}
+
+function handleBundleRemove(e) {
+  const group = e.target.closest(".bundle-input-group");
+  if (document.querySelectorAll(".bundle-input-group").length > 1) {
+    group.remove();
+  } else {
+    group.querySelector(".bundle-qty").value = "";
+    group.querySelector(".bundle-price").value = "";
+  }
+}
+
+function getBundlesFromForm() {
+  const groups = document.querySelectorAll(".bundle-input-group");
+  const bundles = [];
+  groups.forEach((group) => {
+    const qty = parseInt(group.querySelector(".bundle-qty").value);
+    const price = parseFloat(group.querySelector(".bundle-price").value);
+    if (qty > 0 && price > 0) {
+      bundles.push({ qty, price });
+    }
+  });
+  return bundles;
+}
+
+function updateCategoryTypeLists() {
+  const categories = [...new Set(products.map((p) => p.category))];
+  const categoryList = document.getElementById("categoryList");
+  if (categoryList) {
+    categoryList.innerHTML = categories
+      .map((c) => `<option value="${c}">`)
+      .join("");
+  }
+
+  const types = [...new Set(products.map((p) => p.type))];
+  const typeList = document.getElementById("typeList");
+  if (typeList) {
+    typeList.innerHTML = types.map((t) => `<option value="${t}">`).join("");
+  }
 }
 
 async function saveProduct(event) {
@@ -1077,6 +1251,7 @@ async function saveProduct(event) {
   const type = document.getElementById("productType").value.trim();
   const price = Number(document.getElementById("productPrice").value);
   const stock = Number(document.getElementById("productStock").value);
+  const bundles = getBundlesFromForm();
 
   if (!name || !category || !type || isNaN(price) || isNaN(stock)) {
     alert("Please complete all item fields.");
@@ -1091,6 +1266,7 @@ async function saveProduct(event) {
       existing.type = type;
       existing.price = price;
       existing.stock = stock;
+      existing.bundles = bundles;
     }
   } else {
     const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -1101,8 +1277,7 @@ async function saveProduct(event) {
       name,
       price,
       stock,
-      bundles: [],
-      specials: [],
+      bundles: bundles,
     });
   }
 
@@ -1151,6 +1326,10 @@ function switchView(view) {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === view);
   });
+
+  if (view === "dashboard") {
+    renderDashboard();
+  }
 }
 
 // ----- LOGIN -----
@@ -1185,7 +1364,6 @@ function handleLogin() {
 async function initializeApp() {
   setSyncStatus("Initializing database...", "info");
 
-  // Initialize database
   const dbInitialized = await initDatabase();
   if (!dbInitialized) {
     setSyncStatus(
@@ -1195,25 +1373,21 @@ async function initializeApp() {
     return;
   }
 
-  // Load data
   await loadData();
-
   renderAll();
   setSyncStatus("Ready - offline mode", "success");
 }
 
 // ----- INIT -----
 async function init() {
-  // Wait for Dexie to load first
   if (window.dexieLoadPromise) {
     try {
       await window.dexieLoadPromise;
     } catch (error) {
-      console.error("Failed to load Dexie:", error);
+      console.warn("Dexie load issue:", error);
     }
   }
 
-  // Check for existing authentication
   if (checkAuth()) {
     document.getElementById("loginOverlay").style.display = "none";
     document.getElementById("appShell").style.display = "block";
@@ -1240,7 +1414,13 @@ async function init() {
     .getElementById("productSearch")
     .addEventListener("input", renderProducts);
   document.getElementById("checkoutBtn").addEventListener("click", checkout);
-  document.getElementById("paymentMethod").value = "Cash";
+
+  // Payment method handler - no special handling needed, price editing is always available
+  document
+    .getElementById("paymentMethod")
+    .addEventListener("change", function () {
+      // Price editing is always available for all payment methods
+    });
 
   // Inventory
   document
@@ -1252,6 +1432,9 @@ async function init() {
   document
     .getElementById("resetProductForm")
     .addEventListener("click", resetProductForm);
+  document
+    .getElementById("addBundleBtn")
+    .addEventListener("click", () => addBundleInput());
 
   // Sales
   document
@@ -1267,3 +1450,6 @@ async function init() {
 
 // Start the app when DOM is ready
 document.addEventListener("DOMContentLoaded", init);
+
+console.log("🌿 Bud & Brush application loaded");
+console.log("✅ Price editing enabled - click any price in cart to modify");

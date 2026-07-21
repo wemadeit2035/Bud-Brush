@@ -43,7 +43,7 @@
     <div class="app-shell" id="appShell" style="display: none">
       <header class="topbar">
         <div>
-          <h1>Bud & Brush</h1>
+          <h1>🌿 Bud & Brush</h1>
         </div>
         <div class="topbar-actions">
           <div id="syncStatus" class="sync-status">Preparing data…</div>
@@ -103,7 +103,9 @@
                     <option value="Cash">Cash</option>
                     <option value="Yoco">Yoco</option>
                     <option value="EFT">EFT</option>
+                    <option value="Uberzol">Uberzol</option>
                   </select>
+
                   <button id="checkoutBtn" class="btn btn-success w-100 mt-3">
                     Record contribution
                   </button>
@@ -166,11 +168,19 @@
                         id="productCategory"
                         class="form-control"
                         required
+                        list="categoryList"
                       />
+                      <datalist id="categoryList"></datalist>
                     </div>
                     <div class="col-md-6">
                       <label class="form-label">Type</label>
-                      <input id="productType" class="form-control" required />
+                      <input
+                        id="productType"
+                        class="form-control"
+                        required
+                        list="typeList"
+                      />
+                      <datalist id="typeList"></datalist>
                     </div>
                   </div>
                   <div class="row g-3 mt-1">
@@ -194,6 +204,38 @@
                         required
                       />
                     </div>
+                  </div>
+                  <div class="mb-3 mt-3">
+                    <label class="form-label">Bundles (Qty:Price)</label>
+                    <div id="bundlesContainer">
+                      <div class="bundle-input-group d-flex gap-2 mb-2">
+                        <input
+                          type="number"
+                          class="form-control bundle-qty"
+                          placeholder="Qty"
+                          min="1"
+                        />
+                        <input
+                          type="number"
+                          class="form-control bundle-price"
+                          placeholder="Price"
+                          step="0.01"
+                        />
+                        <button
+                          type="button"
+                          class="btn btn-outline-danger remove-bundle-btn"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      id="addBundleBtn"
+                      class="btn btn-outline-secondary btn-sm"
+                    >
+                      + Add Bundle
+                    </button>
                   </div>
                   <div class="d-flex gap-2 mt-4">
                     <button type="submit" class="btn btn-success">Save</button>
@@ -239,6 +281,7 @@
                   <option value="Cash">Cash</option>
                   <option value="Yoco">Yoco</option>
                   <option value="EFT">EFT</option>
+                  <option value="Uberzol">Uberzol</option>
                 </select>
                 <button id="exportSalesBtn" class="btn btn-outline-primary">
                   Export CSV
@@ -293,12 +336,24 @@
               </div>
             </div>
             <div class="col-md-6 col-xl-3">
-              <div class="dash-card lowstock p-3">
+              <div class="dash-card eft p-3">
                 <div class="d-flex justify-content-between align-items-start">
                   <span class="dash-label">EFT</span>
                   <i class="fas fa-file-invoice-dollar"></i>
                 </div>
                 <h2 id="dashboardEftSales">0.00</h2>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-4 mb-4">
+            <div class="col-md-6 col-xl-3">
+              <div class="dash-card uberzol p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <span class="dash-label">Uberzol</span>
+                  <i class="fas fa-mobile-alt"></i>
+                </div>
+                <h2 id="dashboardUberzol">0.00</h2>
               </div>
             </div>
           </div>
@@ -338,19 +393,136 @@
     <script>
       // Load Dexie from CDN with fallback
       function loadDexie() {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
+          // Check if Dexie is already loaded
+          if (typeof Dexie !== "undefined") {
+            resolve();
+            return;
+          }
+
           // Try multiple CDN sources
           const cdnUrls = [
             "https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js",
             "https://unpkg.com/dexie@3.2.4/dist/dexie.min.js",
-            "https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js",
           ];
 
-          let loaded = false;
+          let attempts = 0;
 
           function tryLoad(index) {
+            attempts++;
             if (index >= cdnUrls.length) {
-              reject(new Error("Failed to load Dexie from all CDN sources"));
+              console.warn(
+                "Dexie failed to load from CDN, using memory fallback",
+              );
+              // Create a simple Dexie-like object for memory storage
+              window.Dexie = function (dbName) {
+                this.dbName = dbName;
+                this.version = function () {
+                  return this;
+                };
+                this.stores = function () {
+                  return this;
+                };
+                this.open = function () {
+                  return Promise.resolve();
+                };
+                this.table = function (name) {
+                  return {
+                    toArray: function () {
+                      return Promise.resolve(
+                        window._memoryStorage?.[name] || [],
+                      );
+                    },
+                    get: function (id) {
+                      const items = window._memoryStorage?.[name] || [];
+                      return Promise.resolve(
+                        items.find((item) => String(item.id) === String(id)) ||
+                          null,
+                      );
+                    },
+                    put: function (item) {
+                      if (!window._memoryStorage) window._memoryStorage = {};
+                      if (!window._memoryStorage[name])
+                        window._memoryStorage[name] = [];
+                      const existing = window._memoryStorage[name].findIndex(
+                        (i) => String(i.id) === String(item.id),
+                      );
+                      if (existing >= 0) {
+                        window._memoryStorage[name][existing] = item;
+                      } else {
+                        window._memoryStorage[name].push(item);
+                      }
+                      return Promise.resolve(item.id);
+                    },
+                    bulkPut: function (items) {
+                      if (!window._memoryStorage) window._memoryStorage = {};
+                      if (!window._memoryStorage[name])
+                        window._memoryStorage[name] = [];
+                      items.forEach((item) => {
+                        const existing = window._memoryStorage[name].findIndex(
+                          (i) => String(i.id) === String(item.id),
+                        );
+                        if (existing >= 0) {
+                          window._memoryStorage[name][existing] = item;
+                        } else {
+                          window._memoryStorage[name].push(item);
+                        }
+                      });
+                      return Promise.resolve();
+                    },
+                    delete: function (id) {
+                      if (!window._memoryStorage) window._memoryStorage = {};
+                      if (!window._memoryStorage[name])
+                        window._memoryStorage[name] = [];
+                      window._memoryStorage[name] = window._memoryStorage[
+                        name
+                      ].filter((i) => String(i.id) !== String(id));
+                      return Promise.resolve();
+                    },
+                    clear: function () {
+                      if (!window._memoryStorage) window._memoryStorage = {};
+                      window._memoryStorage[name] = [];
+                      return Promise.resolve();
+                    },
+                    where: function () {
+                      return {
+                        equals: function () {
+                          return {
+                            toArray: function () {
+                              const items = window._memoryStorage?.[name] || [];
+                              return Promise.resolve(items);
+                            },
+                          };
+                        },
+                        below: function () {
+                          return {
+                            toArray: function () {
+                              const items = window._memoryStorage?.[name] || [];
+                              return Promise.resolve(items);
+                            },
+                          };
+                        },
+                      };
+                    },
+                  };
+                };
+                // Add hooks support
+                this.table().hook = {
+                  creating: function () {
+                    return this;
+                  },
+                };
+                this.products = this.table("products");
+                this.sales = this.table("sales");
+              };
+              // Initialize memory storage
+              if (!window._memoryStorage) {
+                window._memoryStorage = {
+                  products: [],
+                  sales: [],
+                };
+              }
+              resolve();
               return;
             }
 
@@ -360,10 +532,117 @@
 
             script.onload = function () {
               if (typeof Dexie !== "undefined") {
-                loaded = true;
                 resolve();
-              } else {
+              } else if (attempts < 3) {
                 tryLoad(index + 1);
+              } else {
+                // Fallback to memory
+                console.warn("Dexie not available, using memory fallback");
+                // Simple Dexie mock
+                window.Dexie = function (dbName) {
+                  this.dbName = dbName;
+                  this.version = function () {
+                    return this;
+                  };
+                  this.stores = function () {
+                    return this;
+                  };
+                  this.open = function () {
+                    return Promise.resolve();
+                  };
+                  this.table = function (name) {
+                    return {
+                      toArray: function () {
+                        return Promise.resolve(
+                          window._memoryStorage?.[name] || [],
+                        );
+                      },
+                      get: function (id) {
+                        const items = window._memoryStorage?.[name] || [];
+                        return Promise.resolve(
+                          items.find(
+                            (item) => String(item.id) === String(id),
+                          ) || null,
+                        );
+                      },
+                      put: function (item) {
+                        if (!window._memoryStorage) window._memoryStorage = {};
+                        if (!window._memoryStorage[name])
+                          window._memoryStorage[name] = [];
+                        const existing = window._memoryStorage[name].findIndex(
+                          (i) => String(i.id) === String(item.id),
+                        );
+                        if (existing >= 0) {
+                          window._memoryStorage[name][existing] = item;
+                        } else {
+                          window._memoryStorage[name].push(item);
+                        }
+                        return Promise.resolve(item.id);
+                      },
+                      bulkPut: function (items) {
+                        if (!window._memoryStorage) window._memoryStorage = {};
+                        if (!window._memoryStorage[name])
+                          window._memoryStorage[name] = [];
+                        items.forEach((item) => {
+                          const existing = window._memoryStorage[
+                            name
+                          ].findIndex((i) => String(i.id) === String(item.id));
+                          if (existing >= 0) {
+                            window._memoryStorage[name][existing] = item;
+                          } else {
+                            window._memoryStorage[name].push(item);
+                          }
+                        });
+                        return Promise.resolve();
+                      },
+                      delete: function (id) {
+                        if (!window._memoryStorage) window._memoryStorage = {};
+                        if (!window._memoryStorage[name])
+                          window._memoryStorage[name] = [];
+                        window._memoryStorage[name] = window._memoryStorage[
+                          name
+                        ].filter((i) => String(i.id) !== String(id));
+                        return Promise.resolve();
+                      },
+                      clear: function () {
+                        if (!window._memoryStorage) window._memoryStorage = {};
+                        window._memoryStorage[name] = [];
+                        return Promise.resolve();
+                      },
+                      where: function () {
+                        return {
+                          equals: function () {
+                            return {
+                              toArray: function () {
+                                return Promise.resolve(
+                                  window._memoryStorage?.[name] || [],
+                                );
+                              },
+                            };
+                          },
+                          below: function () {
+                            return {
+                              toArray: function () {
+                                return Promise.resolve(
+                                  window._memoryStorage?.[name] || [],
+                                );
+                              },
+                            };
+                          },
+                        };
+                      },
+                    };
+                  };
+                  this.products = this.table("products");
+                  this.sales = this.table("sales");
+                };
+                if (!window._memoryStorage) {
+                  window._memoryStorage = {
+                    products: [],
+                    sales: [],
+                  };
+                }
+                resolve();
               }
             };
 
@@ -372,12 +651,6 @@
             };
 
             document.head.appendChild(script);
-          }
-
-          // Check if Dexie is already loaded
-          if (typeof Dexie !== "undefined") {
-            resolve();
-            return;
           }
 
           tryLoad(0);
