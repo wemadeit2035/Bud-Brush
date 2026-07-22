@@ -471,7 +471,19 @@ class BudAndBrushSupabase {
         .order("date", { ascending: false });
 
       if (error) throw error;
-      return data || [];
+
+      // Map database column names back to camelCase for the app
+      return (data || []).map((item) => ({
+        id: item.id,
+        productId: item.productid, // Map productid to productId
+        productName: item.productname, // Map productname to productName
+        quantity: item.quantity,
+        price: item.price,
+        payment: item.payment,
+        total: item.total,
+        date: item.date,
+        note: item.note,
+      }));
     } catch (error) {
       console.error("Error getting sales:", error);
       return [];
@@ -500,9 +512,36 @@ class BudAndBrushSupabase {
       sale.price = Number(sale.price) || 0;
       sale.total = Number(sale.total) || 0;
 
-      const { error } = await this.client.from("sales").insert(sale);
+      // Use lowercase column names to match your database
+      const saleData = {
+        id: sale.id,
+        productid: sale.productid, // Changed from productId to productid
+        productname: sale.productname, // Changed from productName to productname
+        quantity: sale.quantity,
+        price: sale.price,
+        payment: sale.payment,
+        total: sale.total,
+        date: sale.date || new Date().toISOString(),
+      };
 
-      if (error) throw error;
+      // Only add note if it exists
+      if (sale.note) {
+        saleData.note = sale.note;
+      }
+
+      console.log("Attempting to insert sale:", saleData);
+
+      const { data, error } = await this.client
+        .from("sales")
+        .insert(saleData)
+        .select();
+
+      if (error) {
+        console.error("Insert error:", error);
+        throw error;
+      }
+
+      console.log("Sale saved successfully:", data);
       return sale.id;
     } catch (error) {
       console.error("Error saving sale:", error);
@@ -610,22 +649,22 @@ class BudAndBrushSupabase {
       // Get all sales
       const { data: salesData, error } = await this.client
         .from("sales")
-        .select("productId, productName, quantity, total");
+        .select("productid, productname, quantity, total");
 
       if (error) throw error;
 
       // Aggregate in memory
       const productMap = new Map();
       salesData.forEach((sale) => {
-        if (!productMap.has(sale.productId)) {
-          productMap.set(sale.productId, {
-            id: sale.productId,
-            name: sale.productName,
+        if (!productMap.has(sale.productid)) {
+          productMap.set(sale.productid, {
+            id: sale.productid,
+            name: sale.productname,
             quantity: 0,
             revenue: 0,
           });
         }
-        const entry = productMap.get(sale.productId);
+        const entry = productMap.get(sale.productid);
         entry.quantity += sale.quantity || 0;
         entry.revenue += sale.total || 0;
       });
@@ -762,7 +801,7 @@ function normalizeSale(s) {
   return {
     ...s,
     id: String(s.id),
-    productId: String(s.productId),
+    productid: String(s.productid),
     quantity: Number(s.quantity || 0),
     price: Number(s.price || 0),
     total: Number(s.total || 0),
@@ -922,7 +961,7 @@ function renderCart() {
   let subtotal = 0;
   list.innerHTML = cart
     .map((item) => {
-      const product = getProductById(item.productId);
+      const product = getProductById(item.productid);
       if (!product) return "";
 
       const currentPrice =
@@ -986,7 +1025,7 @@ function renderCart() {
 
   list.querySelectorAll("[data-remove]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      cart = cart.filter((i) => String(i.productId) !== btn.dataset.remove);
+      cart = cart.filter((i) => String(i.productid) !== btn.dataset.remove);
       renderCart();
     });
   });
@@ -995,11 +1034,11 @@ function renderCart() {
     btn.addEventListener("click", () => {
       const id = btn.dataset.update;
       const delta = Number(btn.dataset.delta);
-      const item = cart.find((i) => String(i.productId) === id);
+      const item = cart.find((i) => String(i.productid) === id);
       if (item) {
         item.quantity += delta;
         if (item.quantity <= 0) {
-          cart = cart.filter((i) => String(i.productId) !== id);
+          cart = cart.filter((i) => String(i.productid) !== id);
         } else {
           const product = getProductById(id);
           if (product) {
@@ -1023,9 +1062,9 @@ function renderCart() {
 
   list.querySelectorAll(".cart-price-input").forEach((input) => {
     input.addEventListener("input", function () {
-      const productId = this.dataset.productId;
+      const productid = this.dataset.productid;
       const value = parseFloat(this.value);
-      const item = cart.find((i) => String(i.productId) === productId);
+      const item = cart.find((i) => String(i.productid) === productid);
       if (item && !isNaN(value) && value >= 0) {
         item.customPrice = value;
         updateCartSubtotal();
@@ -1039,9 +1078,9 @@ function renderCart() {
 
   list.querySelectorAll(".reset-price-btn").forEach((btn) => {
     btn.addEventListener("click", function () {
-      const productId = this.dataset.productId;
-      const item = cart.find((i) => String(i.productId) === productId);
-      const product = getProductById(productId);
+      const productid = this.dataset.productid;
+      const item = cart.find((i) => String(i.productid) === productid);
+      const product = getProductById(productid);
       if (item && product) {
         delete item.customPrice;
         renderCart();
@@ -1058,7 +1097,7 @@ function renderCart() {
 function updateCartSubtotal() {
   let subtotal = 0;
   cart.forEach((item) => {
-    const product = getProductById(item.productId);
+    const product = getProductById(item.productid);
     if (product) {
       const price =
         item.customPrice !== undefined
@@ -1110,7 +1149,7 @@ function renderSalesHistory() {
 
   const filtered = sales.filter((s) => {
     const matchPayment = filter === "all" || s.payment === filter;
-    const matchSearch = `${s.productName} ${s.payment}`
+    const matchSearch = `${s.productname} ${s.payment}`
       .toLowerCase()
       .includes(search);
     return matchPayment && matchSearch;
@@ -1137,7 +1176,7 @@ function renderSalesHistory() {
       return `
       <tr>
         <td>${new Date(s.date).toLocaleString()}</td>
-        <td>${s.productName}</td>
+        <td>${s.productname}</td>
         <td>${s.quantity}</td>
         <td><span class="${badgeClass}">${s.payment}</span></td>
         <td>${currency(s.total)}</td>
@@ -1194,7 +1233,7 @@ function renderDashboard() {
     .map((p) => ({
       name: p.name,
       units: sales
-        .filter((s) => String(s.productId) === String(p.id))
+        .filter((s) => String(s.productid) === String(p.id))
         .reduce((sum, s) => sum + s.quantity, 0),
     }))
     .sort((a, b) => b.units - a.units)
@@ -1287,16 +1326,16 @@ function renderAll() {
 }
 
 // ----- CART ACTIONS -----
-function addToCart(productId, qty = 1) {
-  const product = getProductById(productId);
+function addToCart(productid, qty = 1) {
+  const product = getProductById(productid);
   if (!product) return;
   if (product.stock < qty) {
     alert(`Only ${product.stock} unit(s) of ${product.name} remain.`);
     return;
   }
-  const existing = cart.find((i) => String(i.productId) === String(productId));
+  const existing = cart.find((i) => String(i.productid) === String(productid));
   if (existing) existing.quantity += qty;
-  else cart.push({ productId: String(productId), quantity: qty });
+  else cart.push({ productid: String(productid), quantity: qty });
   renderCart();
 }
 
@@ -1329,7 +1368,7 @@ async function checkout() {
   if (payment === "Uberzol" && uberzolTotal !== null) {
     // Calculate the normal subtotal for proportion distribution
     cart.forEach((item) => {
-      const product = getProductById(item.productId);
+      const product = getProductById(item.productid);
       if (product) {
         calculatedSubtotal += calculatePrice(product, item.quantity);
       }
@@ -1337,7 +1376,7 @@ async function checkout() {
   }
 
   for (const item of cart) {
-    const product = getProductById(item.productId);
+    const product = getProductById(item.productid);
     if (!product) continue;
     if (product.stock < item.quantity) {
       alert(`Only ${product.stock} unit(s) of ${product.name} remain.`);
@@ -1364,8 +1403,8 @@ async function checkout() {
 
     newSales.push({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      productId: String(product.id),
-      productName: product.name,
+      productid: String(product.id),
+      productname: product.name,
       quantity: item.quantity,
       price: product.price,
       payment,
@@ -1394,7 +1433,7 @@ function updateUberzolSubtotal() {
   // Calculate the current cart subtotal
   let subtotal = 0;
   cart.forEach((item) => {
-    const product = getProductById(item.productId);
+    const product = getProductById(item.productid);
     if (product) {
       const price =
         item.customPrice !== undefined
@@ -1429,7 +1468,7 @@ function resetUberzolSubtotal() {
   // Reset to the calculated subtotal
   let subtotal = 0;
   cart.forEach((item) => {
-    const product = getProductById(item.productId);
+    const product = getProductById(item.productid);
     if (product) {
       const price =
         item.customPrice !== undefined
@@ -1469,7 +1508,7 @@ function setupUberzolSubtotalListener() {
       // If invalid, show the calculated subtotal
       let calculatedSubtotal = 0;
       cart.forEach((item) => {
-        const product = getProductById(item.productId);
+        const product = getProductById(item.productid);
         if (product) {
           const price =
             item.customPrice !== undefined
@@ -1501,8 +1540,8 @@ async function deleteProduct(id) {
 
 function resetProductForm() {
   document.getElementById("productForm").reset();
-  document.getElementById("productId").value = "";
-  document.getElementById("productName").focus();
+  document.getElementById("productid").value = "";
+  document.getElementById("productname").focus();
   const container = document.getElementById("bundlesContainer");
   container.innerHTML = `
     <div class="bundle-input-group d-flex gap-2 mb-2">
@@ -1517,8 +1556,8 @@ function resetProductForm() {
 function editProduct(id) {
   const p = getProductById(id);
   if (!p) return;
-  document.getElementById("productId").value = p.id;
-  document.getElementById("productName").value = p.name;
+  document.getElementById("productid").value = p.id;
+  document.getElementById("productname").value = p.name;
   document.getElementById("productCategory").value = p.category;
   document.getElementById("productType").value = p.type;
   document.getElementById("productPrice").value = p.price;
@@ -1598,8 +1637,8 @@ function updateCategoryTypeLists() {
 
 async function saveProduct(event) {
   event.preventDefault();
-  const id = document.getElementById("productId").value;
-  const name = document.getElementById("productName").value.trim();
+  const id = document.getElementById("productid").value;
+  const name = document.getElementById("productname").value.trim();
   const category = document.getElementById("productCategory").value.trim();
   const type = document.getElementById("productType").value.trim();
   const price = Number(document.getElementById("productPrice").value);
@@ -1645,7 +1684,7 @@ function exportSalesCsv() {
   const search = document.getElementById("salesSearch").value.toLowerCase();
   const filtered = sales.filter((s) => {
     const matchPayment = filter === "all" || s.payment === filter;
-    const matchSearch = `${s.productName} ${s.payment}`
+    const matchSearch = `${s.productname} ${s.payment}`
       .toLowerCase()
       .includes(search);
     return matchPayment && matchSearch;
@@ -1655,7 +1694,7 @@ function exportSalesCsv() {
     ["Date", "Product", "Qty", "Payment", "Total"],
     ...filtered.map((s) => [
       new Date(s.date).toLocaleString(),
-      s.productName,
+      s.productname,
       s.quantity,
       s.payment,
       s.total,
@@ -1782,7 +1821,7 @@ async function init() {
         if (uberzolInput) {
           let subtotal = 0;
           cart.forEach((item) => {
-            const product = getProductById(item.productId);
+            const product = getProductById(item.productid);
             if (product) {
               const price =
                 item.customPrice !== undefined
@@ -1807,7 +1846,7 @@ async function init() {
           // Reset to calculated subtotal
           let subtotal = 0;
           cart.forEach((item) => {
-            const product = getProductById(item.productId);
+            const product = getProductById(item.productid);
             if (product) {
               const price =
                 item.customPrice !== undefined
