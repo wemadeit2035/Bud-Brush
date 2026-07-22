@@ -18,7 +18,7 @@ let cart = [];
 let activeView = "pos";
 let isAuthenticated = false;
 let isDataLoaded = false;
-let supabaseClient = null; // CHANGED: use supabaseClient instead of supabase
+let supabaseClient = null;
 let currentUser = null;
 
 // ----- DEFAULT PRODUCTS -----
@@ -187,21 +187,18 @@ const defaultProducts = [
 class BudAndBrushSupabase {
   constructor() {
     this.initialized = false;
-    this.client = null; // CHANGED: use client instead of supabase
+    this.client = null;
   }
 
   async init() {
     try {
-      // Load Supabase client
       if (typeof supabaseJs === "undefined") {
         throw new Error("Supabase library not loaded");
       }
 
-      // CHANGED: Use a different variable name
       const { createClient } = supabaseJs;
       this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-      // Test connection
       const { data, error } = await this.client
         .from("products")
         .select("count", { count: "exact", head: true });
@@ -293,10 +290,8 @@ class BudAndBrushSupabase {
     }
   }
 
-  // Replace the saveProduct method with this:
   async saveProduct(product) {
     try {
-      // Ensure proper formatting
       const formattedProduct = {
         id: String(product.id),
         name: product.name,
@@ -307,40 +302,15 @@ class BudAndBrushSupabase {
         bundles: product.bundles || [],
       };
 
-      console.log(
-        "Saving product:",
-        formattedProduct.id,
-        formattedProduct.name,
-      );
+      console.log("Saving product:", formattedProduct.id, formattedProduct.name);
 
-      // Use upsert (works with both real Supabase and fallback)
       const { data, error } = await this.client
         .from("products")
         .upsert(formattedProduct, { onConflict: "id" });
 
       if (error) {
         console.error("Upsert error:", error);
-        // Fallback: try insert then update
-        try {
-          const { error: insertError } = await this.client
-            .from("products")
-            .insert(formattedProduct);
-
-          if (insertError) {
-            // Try update
-            const { error: updateError } = await this.client
-              .from("products")
-              .update(formattedProduct)
-              .eq("id", formattedProduct.id);
-
-            if (updateError) {
-              throw updateError;
-            }
-          }
-        } catch (fallbackError) {
-          console.error("Fallback save error:", fallbackError);
-          throw fallbackError;
-        }
+        throw error;
       }
 
       return product.id;
@@ -350,12 +320,8 @@ class BudAndBrushSupabase {
     }
   }
 
-  // Replace the saveProducts method with this:
   async saveProducts(products) {
     try {
-      console.log("Saving multiple products:", products.length);
-
-      // Format all products
       const formattedProducts = products.map((p) => ({
         id: String(p.id),
         name: p.name,
@@ -366,14 +332,12 @@ class BudAndBrushSupabase {
         bundles: p.bundles || [],
       }));
 
-      // Try bulk upsert
       const { data, error } = await this.client
         .from("products")
         .upsert(formattedProducts, { onConflict: "id" });
 
       if (error) {
         console.error("Bulk upsert error:", error);
-        // Fallback: process individually
         for (const product of formattedProducts) {
           await this.saveProduct(product);
         }
@@ -382,16 +346,7 @@ class BudAndBrushSupabase {
       return true;
     } catch (error) {
       console.error("Error saving products:", error);
-      // Last resort: try each product individually
-      try {
-        for (const product of products) {
-          await this.saveProduct(product);
-        }
-        return true;
-      } catch (finalError) {
-        console.error("Final fallback failed:", finalError);
-        throw finalError;
-      }
+      throw error;
     }
   }
 
@@ -472,11 +427,11 @@ class BudAndBrushSupabase {
 
       if (error) throw error;
 
-      // Map database column names back to camelCase for the app
+      // Map database column names (lowercase) to app column names (camelCase)
       return (data || []).map((item) => ({
         id: item.id,
-        productid: item.productid, // Map productid to productId
-        productname: item.productname, // Map productname to productName
+        productId: item.productid,
+        productName: item.productname,
         quantity: item.quantity,
         price: item.price,
         payment: item.payment,
@@ -508,13 +463,10 @@ class BudAndBrushSupabase {
 
   async saveSale(sale) {
     try {
-      sale.quantity = Number(sale.quantity) || 0;
-      sale.price = Number(sale.price) || 0;
-      sale.total = Number(sale.total) || 0;
-
+      // Map camelCase to lowercase for database
       const saleData = {
-        productid: String(sale.productid || ""),
-        productname: String(sale.productname || ""),
+        productid: String(sale.productId || ""),
+        productname: String(sale.productName || ""),
         quantity: Number(sale.quantity) || 0,
         price: Number(sale.price) || 0,
         payment: String(sale.payment || "Cash"),
@@ -534,7 +486,10 @@ class BudAndBrushSupabase {
         .insert(saleData)
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Insert error:", error);
+        throw error;
+      }
 
       console.log("Sale saved successfully with ID:", data?.[0]?.id);
       return data?.[0]?.id;
@@ -641,14 +596,12 @@ class BudAndBrushSupabase {
 
   async getTopProducts(limit = 5) {
     try {
-      // Get all sales
       const { data: salesData, error } = await this.client
         .from("sales")
         .select("productid, productname, quantity, total");
 
       if (error) throw error;
 
-      // Aggregate in memory
       const productMap = new Map();
       salesData.forEach((sale) => {
         if (!productMap.has(sale.productid)) {
@@ -742,7 +695,6 @@ let database = null;
 
 async function initDatabase() {
   try {
-    // Load Supabase client
     if (window.supabaseLoadPromise) {
       await window.supabaseLoadPromise;
     }
@@ -758,7 +710,6 @@ async function initDatabase() {
       throw new Error("Failed to initialize Supabase");
     }
 
-    // Check if products exist, if not load defaults
     const existingProducts = await database.getAllProducts();
     console.log("Existing products:", existingProducts.length);
 
@@ -767,7 +718,6 @@ async function initDatabase() {
       await database.saveProducts(defaultProducts);
       console.log("Default products seeded successfully!");
 
-      // Verify the data was inserted
       const verifyProducts = await database.getAllProducts();
       console.log("Products after seeding:", verifyProducts.length);
     }
@@ -779,6 +729,7 @@ async function initDatabase() {
     return false;
   }
 }
+
 // ----- HELPERS -----
 function normalizeProduct(p) {
   if (!p) return null;
@@ -796,7 +747,8 @@ function normalizeSale(s) {
   return {
     ...s,
     id: String(s.id),
-    productid: String(s.productid),
+    productId: String(s.productId || s.productid || ""),
+    productName: String(s.productName || s.productname || ""),
     quantity: Number(s.quantity || 0),
     price: Number(s.price || 0),
     total: Number(s.total || 0),
@@ -956,7 +908,7 @@ function renderCart() {
   let subtotal = 0;
   list.innerHTML = cart
     .map((item) => {
-      const product = getProductById(item.productid);
+      const product = getProductById(item.productId);
       if (!product) return "";
 
       const currentPrice =
@@ -1020,7 +972,7 @@ function renderCart() {
 
   list.querySelectorAll("[data-remove]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      cart = cart.filter((i) => String(i.productid) !== btn.dataset.remove);
+      cart = cart.filter((i) => String(i.productId) !== btn.dataset.remove);
       renderCart();
     });
   });
@@ -1029,11 +981,11 @@ function renderCart() {
     btn.addEventListener("click", () => {
       const id = btn.dataset.update;
       const delta = Number(btn.dataset.delta);
-      const item = cart.find((i) => String(i.productid) === id);
+      const item = cart.find((i) => String(i.productId) === id);
       if (item) {
         item.quantity += delta;
         if (item.quantity <= 0) {
-          cart = cart.filter((i) => String(i.productid) !== id);
+          cart = cart.filter((i) => String(i.productId) !== id);
         } else {
           const product = getProductById(id);
           if (product) {
@@ -1057,9 +1009,9 @@ function renderCart() {
 
   list.querySelectorAll(".cart-price-input").forEach((input) => {
     input.addEventListener("input", function () {
-      const productid = this.dataset.productid;
+      const productId = this.dataset.productId;
       const value = parseFloat(this.value);
-      const item = cart.find((i) => String(i.productid) === productid);
+      const item = cart.find((i) => String(i.productId) === productId);
       if (item && !isNaN(value) && value >= 0) {
         item.customPrice = value;
         updateCartSubtotal();
@@ -1073,9 +1025,9 @@ function renderCart() {
 
   list.querySelectorAll(".reset-price-btn").forEach((btn) => {
     btn.addEventListener("click", function () {
-      const productid = this.dataset.productid;
-      const item = cart.find((i) => String(i.productid) === productid);
-      const product = getProductById(productid);
+      const productId = this.dataset.productId;
+      const item = cart.find((i) => String(i.productId) === productId);
+      const product = getProductById(productId);
       if (item && product) {
         delete item.customPrice;
         renderCart();
@@ -1089,10 +1041,11 @@ function renderCart() {
     updateUberzolSubtotal();
   }
 }
+
 function updateCartSubtotal() {
   let subtotal = 0;
   cart.forEach((item) => {
-    const product = getProductById(item.productid);
+    const product = getProductById(item.productId);
     if (product) {
       const price =
         item.customPrice !== undefined
@@ -1144,7 +1097,7 @@ function renderSalesHistory() {
 
   const filtered = sales.filter((s) => {
     const matchPayment = filter === "all" || s.payment === filter;
-    const matchSearch = `${s.productname} ${s.payment}`
+    const matchSearch = `${s.productName} ${s.payment}`
       .toLowerCase()
       .includes(search);
     return matchPayment && matchSearch;
@@ -1171,7 +1124,7 @@ function renderSalesHistory() {
       return `
       <tr>
         <td>${new Date(s.date).toLocaleString()}</td>
-        <td>${s.productname}</td>
+        <td>${s.productName}</td>
         <td>${s.quantity}</td>
         <td><span class="${badgeClass}">${s.payment}</span></td>
         <td>${currency(s.total)}</td>
@@ -1228,7 +1181,7 @@ function renderDashboard() {
     .map((p) => ({
       name: p.name,
       units: sales
-        .filter((s) => String(s.productid) === String(p.id))
+        .filter((s) => String(s.productId) === String(p.id))
         .reduce((sum, s) => sum + s.quantity, 0),
     }))
     .sort((a, b) => b.units - a.units)
@@ -1321,16 +1274,16 @@ function renderAll() {
 }
 
 // ----- CART ACTIONS -----
-function addToCart(productid, qty = 1) {
-  const product = getProductById(productid);
+function addToCart(productId, qty = 1) {
+  const product = getProductById(productId);
   if (!product) return;
   if (product.stock < qty) {
     alert(`Only ${product.stock} unit(s) of ${product.name} remain.`);
     return;
   }
-  const existing = cart.find((i) => String(i.productid) === String(productid));
+  const existing = cart.find((i) => String(i.productId) === String(productId));
   if (existing) existing.quantity += qty;
-  else cart.push({ productid: String(productid), quantity: qty });
+  else cart.push({ productId: String(productId), quantity: qty });
   renderCart();
 }
 
@@ -1361,9 +1314,8 @@ async function checkout() {
   // Calculate proportions for Uberzol distribution
   let calculatedSubtotal = 0;
   if (payment === "Uberzol" && uberzolTotal !== null) {
-    // Calculate the normal subtotal for proportion distribution
     cart.forEach((item) => {
-      const product = getProductById(item.productid);
+      const product = getProductById(item.productId);
       if (product) {
         calculatedSubtotal += calculatePrice(product, item.quantity);
       }
@@ -1371,7 +1323,7 @@ async function checkout() {
   }
 
   for (const item of cart) {
-    const product = getProductById(item.productid);
+    const product = getProductById(item.productId);
     if (!product) continue;
     if (product.stock < item.quantity) {
       alert(`Only ${product.stock} unit(s) of ${product.name} remain.`);
@@ -1381,7 +1333,6 @@ async function checkout() {
 
     let total;
     if (payment === "Uberzol" && uberzolTotal !== null) {
-      // Distribute the Uberzol total proportionally
       const itemTotal = calculatePrice(product, item.quantity);
       const proportion =
         calculatedSubtotal > 0
@@ -1389,27 +1340,28 @@ async function checkout() {
           : 1 / cart.length;
       total = uberzolTotal * proportion;
     } else {
-      // Use custom price if set, otherwise calculate with bundles
       total =
         item.customPrice !== undefined
           ? item.customPrice
           : calculatePrice(product, item.quantity);
     }
 
-    newSales.push({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      productid: String(product.id),
-      productname: product.name,
+    // DON'T include id - let Supabase generate it
+    const saleRecord = {
+      productId: String(product.id),
+      productName: product.name,
       quantity: item.quantity,
       price: product.price,
-      payment,
+      payment: payment,
       total: total,
       date: new Date().toISOString(),
-      // Add note if Uberzol was used with manual total
-      ...(payment === "Uberzol" && {
-        note: `Uberzol total: ${currency(uberzolTotal)}`,
-      }),
-    });
+    };
+
+    if (payment === "Uberzol") {
+      saleRecord.note = `Uberzol total: ${currency(uberzolTotal)}`;
+    }
+
+    newSales.push(saleRecord);
   }
 
   sales.push(...newSales);
@@ -1425,10 +1377,9 @@ function updateUberzolSubtotal() {
   const uberzolGroup = document.getElementById("uberzolSubtotalGroup");
   if (!uberzolGroup || uberzolGroup.style.display === "none") return;
 
-  // Calculate the current cart subtotal
   let subtotal = 0;
   cart.forEach((item) => {
-    const product = getProductById(item.productid);
+    const product = getProductById(item.productId);
     if (product) {
       const price =
         item.customPrice !== undefined
@@ -1438,16 +1389,13 @@ function updateUberzolSubtotal() {
     }
   });
 
-  // Get the input field
   const input = document.getElementById("uberzolSubtotalInput");
   if (!input) return;
 
-  // If the input is empty or the user hasn't edited it, set it to the subtotal
   if (!input.dataset.userEdited || input.dataset.userEdited === "false") {
     input.value = subtotal.toFixed(2);
   }
 
-  // Update the cart subtotal display to show the Uberzol amount
   const subtotalEl = document.getElementById("cartSubtotal");
   if (subtotalEl && input.value) {
     const uberzolAmount = parseFloat(input.value) || 0;
@@ -1460,10 +1408,9 @@ function resetUberzolSubtotal() {
   const input = document.getElementById("uberzolSubtotalInput");
   if (!input) return;
 
-  // Reset to the calculated subtotal
   let subtotal = 0;
   cart.forEach((item) => {
-    const product = getProductById(item.productid);
+    const product = getProductById(item.productId);
     if (product) {
       const price =
         item.customPrice !== undefined
@@ -1476,7 +1423,6 @@ function resetUberzolSubtotal() {
   input.value = subtotal.toFixed(2);
   input.dataset.userEdited = "false";
 
-  // Update the display
   const subtotalEl = document.getElementById("cartSubtotal");
   if (subtotalEl) {
     subtotalEl.textContent = currency(subtotal);
@@ -1494,16 +1440,14 @@ function setupUberzolSubtotalListener() {
     this.dataset.userEdited = "true";
     const value = parseFloat(this.value);
 
-    // Update the cart subtotal display
     const subtotalEl = document.getElementById("cartSubtotal");
     if (subtotalEl && !isNaN(value) && value >= 0) {
       subtotalEl.textContent = currency(value);
       subtotalEl.style.color = "#7c3aed";
     } else if (subtotalEl) {
-      // If invalid, show the calculated subtotal
       let calculatedSubtotal = 0;
       cart.forEach((item) => {
-        const product = getProductById(item.productid);
+        const product = getProductById(item.productId);
         if (product) {
           const price =
             item.customPrice !== undefined
@@ -1517,7 +1461,6 @@ function setupUberzolSubtotalListener() {
     }
   });
 
-  // Select all text on focus
   input.addEventListener("focus", function () {
     this.select();
   });
@@ -1535,8 +1478,8 @@ async function deleteProduct(id) {
 
 function resetProductForm() {
   document.getElementById("productForm").reset();
-  document.getElementById("productid").value = "";
-  document.getElementById("productname").focus();
+  document.getElementById("productId").value = "";
+  document.getElementById("productName").focus();
   const container = document.getElementById("bundlesContainer");
   container.innerHTML = `
     <div class="bundle-input-group d-flex gap-2 mb-2">
@@ -1551,8 +1494,8 @@ function resetProductForm() {
 function editProduct(id) {
   const p = getProductById(id);
   if (!p) return;
-  document.getElementById("productid").value = p.id;
-  document.getElementById("productname").value = p.name;
+  document.getElementById("productId").value = p.id;
+  document.getElementById("productName").value = p.name;
   document.getElementById("productCategory").value = p.category;
   document.getElementById("productType").value = p.type;
   document.getElementById("productPrice").value = p.price;
@@ -1632,8 +1575,8 @@ function updateCategoryTypeLists() {
 
 async function saveProduct(event) {
   event.preventDefault();
-  const id = document.getElementById("productid").value;
-  const name = document.getElementById("productname").value.trim();
+  const id = document.getElementById("productId").value;
+  const name = document.getElementById("productName").value.trim();
   const category = document.getElementById("productCategory").value.trim();
   const type = document.getElementById("productType").value.trim();
   const price = Number(document.getElementById("productPrice").value);
@@ -1679,7 +1622,7 @@ function exportSalesCsv() {
   const search = document.getElementById("salesSearch").value.toLowerCase();
   const filtered = sales.filter((s) => {
     const matchPayment = filter === "all" || s.payment === filter;
-    const matchSearch = `${s.productname} ${s.payment}`
+    const matchSearch = `${s.productName} ${s.payment}`
       .toLowerCase()
       .includes(search);
     return matchPayment && matchSearch;
@@ -1689,7 +1632,7 @@ function exportSalesCsv() {
     ["Date", "Product", "Qty", "Payment", "Total"],
     ...filtered.map((s) => [
       new Date(s.date).toLocaleString(),
-      s.productname,
+      s.productName,
       s.quantity,
       s.payment,
       s.total,
@@ -1812,11 +1755,10 @@ async function init() {
 
       if (this.value === "Uberzol") {
         uberzolGroup.style.display = "block";
-        // Reset the input to show calculated subtotal
         if (uberzolInput) {
           let subtotal = 0;
           cart.forEach((item) => {
-            const product = getProductById(item.productid);
+            const product = getProductById(item.productId);
             if (product) {
               const price =
                 item.customPrice !== undefined
@@ -1831,17 +1773,15 @@ async function init() {
         if (subtotalEl) {
           subtotalEl.style.color = "#7c3aed";
         }
-        // Add visual indicator
         document
           .querySelector(".cart-summary")
           ?.classList.add("uberzol-active");
       } else {
         uberzolGroup.style.display = "none";
         if (subtotalEl) {
-          // Reset to calculated subtotal
           let subtotal = 0;
           cart.forEach((item) => {
-            const product = getProductById(item.productid);
+            const product = getProductById(item.productId);
             if (product) {
               const price =
                 item.customPrice !== undefined
