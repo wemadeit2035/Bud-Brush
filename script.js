@@ -902,6 +902,16 @@ function renderCart() {
   const subtotalEl = document.getElementById("cartSubtotal");
   const countEl = document.getElementById("cartCount");
 
+  // Check if Uberzol is active and has a manual value
+  const paymentMethod = document.getElementById("paymentMethod")?.value;
+  const isUberzol = paymentMethod === "Uberzol";
+  const uberzolInput = document.getElementById("uberzolSubtotalInput");
+  let uberzolValue = null;
+
+  if (isUberzol && uberzolInput && uberzolInput.dataset.userEdited === "true") {
+    uberzolValue = parseFloat(uberzolInput.value);
+  }
+
   if (!cart.length) {
     list.innerHTML = '<div class="empty-state">Your cart is empty.</div>';
     subtotalEl.textContent = currency(0);
@@ -958,7 +968,20 @@ function renderCart() {
     })
     .join("");
 
-  subtotalEl.textContent = currency(subtotal);
+  // Use Uberzol value if set, otherwise use calculated subtotal
+  if (
+    isUberzol &&
+    uberzolValue !== null &&
+    !isNaN(uberzolValue) &&
+    uberzolValue >= 0
+  ) {
+    subtotalEl.textContent = currency(uberzolValue);
+    subtotalEl.style.color = "#7c3aed";
+  } else {
+    subtotalEl.textContent = currency(subtotal);
+    subtotalEl.style.color = "";
+  }
+
   countEl.textContent = `${cart.reduce((s, i) => s + i.quantity, 0)} items`;
 
   list.querySelectorAll("[data-remove]").forEach((btn) => {
@@ -1025,8 +1048,13 @@ function renderCart() {
       }
     });
   });
-}
 
+  // Update Uberzol subtotal if visible
+  const uberzolGroup = document.getElementById("uberzolSubtotalGroup");
+  if (uberzolGroup && uberzolGroup.style.display !== "none") {
+    updateUberzolSubtotal();
+  }
+}
 function updateCartSubtotal() {
   let subtotal = 0;
   cart.forEach((item) => {
@@ -1281,6 +1309,33 @@ async function checkout() {
   const payment = document.getElementById("paymentMethod").value;
   const newSales = [];
 
+  // Check if Uberzol is selected and get the manual subtotal
+  let uberzolTotal = null;
+  if (payment === "Uberzol") {
+    const input = document.getElementById("uberzolSubtotalInput");
+    if (input) {
+      const value = parseFloat(input.value);
+      if (!isNaN(value) && value > 0) {
+        uberzolTotal = value;
+      } else {
+        alert("Please enter a valid Uberzol amount (greater than 0).");
+        return;
+      }
+    }
+  }
+
+  // Calculate proportions for Uberzol distribution
+  let calculatedSubtotal = 0;
+  if (payment === "Uberzol" && uberzolTotal !== null) {
+    // Calculate the normal subtotal for proportion distribution
+    cart.forEach((item) => {
+      const product = getProductById(item.productId);
+      if (product) {
+        calculatedSubtotal += calculatePrice(product, item.quantity);
+      }
+    });
+  }
+
   for (const item of cart) {
     const product = getProductById(item.productId);
     if (!product) continue;
@@ -1290,10 +1345,22 @@ async function checkout() {
     }
     product.stock -= item.quantity;
 
-    const total =
-      item.customPrice !== undefined
-        ? item.customPrice
-        : calculatePrice(product, item.quantity);
+    let total;
+    if (payment === "Uberzol" && uberzolTotal !== null) {
+      // Distribute the Uberzol total proportionally
+      const itemTotal = calculatePrice(product, item.quantity);
+      const proportion =
+        calculatedSubtotal > 0
+          ? itemTotal / calculatedSubtotal
+          : 1 / cart.length;
+      total = uberzolTotal * proportion;
+    } else {
+      // Use custom price if set, otherwise calculate with bundles
+      total =
+        item.customPrice !== undefined
+          ? item.customPrice
+          : calculatePrice(product, item.quantity);
+    }
 
     newSales.push({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -1304,6 +1371,10 @@ async function checkout() {
       payment,
       total: total,
       date: new Date().toISOString(),
+      // Add note if Uberzol was used with manual total
+      ...(payment === "Uberzol" && {
+        note: `Uberzol total: ${currency(uberzolTotal)}`,
+      }),
     });
   }
 
@@ -1313,6 +1384,109 @@ async function checkout() {
   cart = [];
   renderAll();
   setSyncStatus("Contribution recorded!", "success");
+}
+
+// ----- UBERZOL SUBTOTAL EDITING -----
+function updateUberzolSubtotal() {
+  const uberzolGroup = document.getElementById("uberzolSubtotalGroup");
+  if (!uberzolGroup || uberzolGroup.style.display === "none") return;
+
+  // Calculate the current cart subtotal
+  let subtotal = 0;
+  cart.forEach((item) => {
+    const product = getProductById(item.productId);
+    if (product) {
+      const price =
+        item.customPrice !== undefined
+          ? item.customPrice
+          : calculatePrice(product, item.quantity);
+      subtotal += price;
+    }
+  });
+
+  // Get the input field
+  const input = document.getElementById("uberzolSubtotalInput");
+  if (!input) return;
+
+  // If the input is empty or the user hasn't edited it, set it to the subtotal
+  if (!input.dataset.userEdited || input.dataset.userEdited === "false") {
+    input.value = subtotal.toFixed(2);
+  }
+
+  // Update the cart subtotal display to show the Uberzol amount
+  const subtotalEl = document.getElementById("cartSubtotal");
+  if (subtotalEl && input.value) {
+    const uberzolAmount = parseFloat(input.value) || 0;
+    subtotalEl.textContent = currency(uberzolAmount);
+    subtotalEl.style.color = "#7c3aed";
+  }
+}
+
+function resetUberzolSubtotal() {
+  const input = document.getElementById("uberzolSubtotalInput");
+  if (!input) return;
+
+  // Reset to the calculated subtotal
+  let subtotal = 0;
+  cart.forEach((item) => {
+    const product = getProductById(item.productId);
+    if (product) {
+      const price =
+        item.customPrice !== undefined
+          ? item.customPrice
+          : calculatePrice(product, item.quantity);
+      subtotal += price;
+    }
+  });
+
+  input.value = subtotal.toFixed(2);
+  input.dataset.userEdited = "false";
+
+  // Update the display
+  const subtotalEl = document.getElementById("cartSubtotal");
+  if (subtotalEl) {
+    subtotalEl.textContent = currency(subtotal);
+    subtotalEl.style.color = "";
+  }
+
+  setSyncStatus("Uberzol subtotal reset", "info");
+}
+
+function setupUberzolSubtotalListener() {
+  const input = document.getElementById("uberzolSubtotalInput");
+  if (!input) return;
+
+  input.addEventListener("input", function () {
+    this.dataset.userEdited = "true";
+    const value = parseFloat(this.value);
+
+    // Update the cart subtotal display
+    const subtotalEl = document.getElementById("cartSubtotal");
+    if (subtotalEl && !isNaN(value) && value >= 0) {
+      subtotalEl.textContent = currency(value);
+      subtotalEl.style.color = "#7c3aed";
+    } else if (subtotalEl) {
+      // If invalid, show the calculated subtotal
+      let calculatedSubtotal = 0;
+      cart.forEach((item) => {
+        const product = getProductById(item.productId);
+        if (product) {
+          const price =
+            item.customPrice !== undefined
+              ? item.customPrice
+              : calculatePrice(product, item.quantity);
+          calculatedSubtotal += price;
+        }
+      });
+      subtotalEl.textContent = currency(calculatedSubtotal);
+      subtotalEl.style.color = "";
+    }
+  });
+
+  // Select all text on focus
+  input.addEventListener("focus", function () {
+    this.select();
+  });
 }
 
 // ----- INVENTORY ACTIONS -----
@@ -1593,11 +1767,68 @@ async function init() {
     .getElementById("productSearch")
     .addEventListener("input", renderProducts);
   document.getElementById("checkoutBtn").addEventListener("click", checkout);
+
+  // Payment method handler - Show/hide Uberzol subtotal editor
   document
     .getElementById("paymentMethod")
     .addEventListener("change", function () {
-      // Price editing is always available for all payment methods
+      const uberzolGroup = document.getElementById("uberzolSubtotalGroup");
+      const uberzolInput = document.getElementById("uberzolSubtotalInput");
+      const subtotalEl = document.getElementById("cartSubtotal");
+
+      if (this.value === "Uberzol") {
+        uberzolGroup.style.display = "block";
+        // Reset the input to show calculated subtotal
+        if (uberzolInput) {
+          let subtotal = 0;
+          cart.forEach((item) => {
+            const product = getProductById(item.productId);
+            if (product) {
+              const price =
+                item.customPrice !== undefined
+                  ? item.customPrice
+                  : calculatePrice(product, item.quantity);
+              subtotal += price;
+            }
+          });
+          uberzolInput.value = subtotal.toFixed(2);
+          uberzolInput.dataset.userEdited = "false";
+        }
+        if (subtotalEl) {
+          subtotalEl.style.color = "#7c3aed";
+        }
+        // Add visual indicator
+        document
+          .querySelector(".cart-summary")
+          ?.classList.add("uberzol-active");
+      } else {
+        uberzolGroup.style.display = "none";
+        if (subtotalEl) {
+          // Reset to calculated subtotal
+          let subtotal = 0;
+          cart.forEach((item) => {
+            const product = getProductById(item.productId);
+            if (product) {
+              const price =
+                item.customPrice !== undefined
+                  ? item.customPrice
+                  : calculatePrice(product, item.quantity);
+              subtotal += price;
+            }
+          });
+          subtotalEl.textContent = currency(subtotal);
+          subtotalEl.style.color = "";
+        }
+        document
+          .querySelector(".cart-summary")
+          ?.classList.remove("uberzol-active");
+      }
     });
+
+  // Reset Uberzol subtotal button
+  document
+    .getElementById("resetUberzolSubtotalBtn")
+    .addEventListener("click", resetUberzolSubtotal);
 
   // Inventory
   document
