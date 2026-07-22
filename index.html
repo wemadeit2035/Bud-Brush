@@ -105,7 +105,6 @@
                     <option value="EFT">EFT</option>
                     <option value="Uberzol">Uberzol</option>
                   </select>
-
                   <button id="checkoutBtn" class="btn btn-success w-100 mt-3">
                     Record contribution
                   </button>
@@ -389,277 +388,377 @@
       </main>
     </div>
 
-    <!-- Dexie.js - Using multiple CDN fallbacks -->
+    <!-- Supabase Client - Load with proper error handling -->
     <script>
-      // Load Dexie from CDN with fallback
-      function loadDexie() {
-        return new Promise((resolve) => {
-          // Check if Dexie is already loaded
-          if (typeof Dexie !== "undefined") {
-            resolve();
-            return;
+      // Global memory store for fallback
+      const FALLBACK_STORE = {
+        products: [],
+        sales: [],
+      };
+
+      // Load Supabase with proper error handling
+      (function loadSupabase() {
+        // Check if already loaded
+        if (typeof supabaseJs !== "undefined") {
+          console.log("Supabase already loaded");
+          window.supabaseLoadPromise = Promise.resolve();
+          return;
+        }
+
+        console.log("Loading Supabase...");
+
+        // Create a promise that will resolve when Supabase is loaded
+        window.supabaseLoadPromise = new Promise((resolve) => {
+          // Try loading from CDN
+          const script = document.createElement("script");
+          script.src =
+            "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js";
+          script.async = true;
+
+          let loaded = false;
+
+          script.onload = function () {
+            // Check if it loaded correctly
+            if (typeof supabaseJs !== "undefined") {
+              console.log("Supabase loaded successfully from CDN");
+              loaded = true;
+              resolve();
+            } else {
+              console.warn(
+                "Supabase script loaded but object not available, trying fallback...",
+              );
+              if (!loaded) tryFallback();
+            }
+          };
+
+          script.onerror = function () {
+            console.warn(
+              "Failed to load Supabase from primary CDN, trying fallback...",
+            );
+            if (!loaded) tryFallback();
+          };
+
+          // Fallback loading method
+          function tryFallback() {
+            // Try alternative CDN
+            const altScript = document.createElement("script");
+            altScript.src =
+              "https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js";
+            altScript.async = true;
+
+            altScript.onload = function () {
+              if (typeof supabaseJs !== "undefined") {
+                console.log("Supabase loaded successfully from fallback CDN");
+                loaded = true;
+                resolve();
+              } else {
+                console.error("Supabase failed to load from all CDNs");
+                if (!loaded) {
+                  createFallbackClient();
+                  loaded = true;
+                  resolve();
+                }
+              }
+            };
+
+            altScript.onerror = function () {
+              console.error("All Supabase CDN attempts failed");
+              if (!loaded) {
+                createFallbackClient();
+                loaded = true;
+                resolve();
+              }
+            };
+
+            document.head.appendChild(altScript);
           }
 
-          // Try multiple CDN sources
-          const cdnUrls = [
-            "https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js",
-            "https://unpkg.com/dexie@3.2.4/dist/dexie.min.js",
-          ];
+          // Create a complete fallback client
+          function createFallbackClient() {
+            console.warn(
+              "Using fallback Supabase client (data stored in memory)",
+            );
 
-          let attempts = 0;
+            // Create a complete fallback client
+            window.supabaseJs = {
+              createClient: function (url, key) {
+                console.log("Creating fallback Supabase client with:", url);
 
-          function tryLoad(index) {
-            attempts++;
-            if (index >= cdnUrls.length) {
-              console.warn(
-                "Dexie failed to load from CDN, using memory fallback",
-              );
-              // Create a simple Dexie-like object for memory storage
-              window.Dexie = function (dbName) {
-                this.dbName = dbName;
-                this.version = function () {
-                  return this;
-                };
-                this.stores = function () {
-                  return this;
-                };
-                this.open = function () {
-                  return Promise.resolve();
-                };
-                this.table = function (name) {
-                  return {
-                    toArray: function () {
-                      return Promise.resolve(
-                        window._memoryStorage?.[name] || [],
-                      );
-                    },
-                    get: function (id) {
-                      const items = window._memoryStorage?.[name] || [];
-                      return Promise.resolve(
-                        items.find((item) => String(item.id) === String(id)) ||
-                          null,
-                      );
-                    },
-                    put: function (item) {
-                      if (!window._memoryStorage) window._memoryStorage = {};
-                      if (!window._memoryStorage[name])
-                        window._memoryStorage[name] = [];
-                      const existing = window._memoryStorage[name].findIndex(
-                        (i) => String(i.id) === String(item.id),
-                      );
-                      if (existing >= 0) {
-                        window._memoryStorage[name][existing] = item;
-                      } else {
-                        window._memoryStorage[name].push(item);
-                      }
-                      return Promise.resolve(item.id);
-                    },
-                    bulkPut: function (items) {
-                      if (!window._memoryStorage) window._memoryStorage = {};
-                      if (!window._memoryStorage[name])
-                        window._memoryStorage[name] = [];
-                      items.forEach((item) => {
-                        const existing = window._memoryStorage[name].findIndex(
-                          (i) => String(i.id) === String(item.id),
-                        );
-                        if (existing >= 0) {
-                          window._memoryStorage[name][existing] = item;
-                        } else {
-                          window._memoryStorage[name].push(item);
-                        }
-                      });
-                      return Promise.resolve();
-                    },
-                    delete: function (id) {
-                      if (!window._memoryStorage) window._memoryStorage = {};
-                      if (!window._memoryStorage[name])
-                        window._memoryStorage[name] = [];
-                      window._memoryStorage[name] = window._memoryStorage[
-                        name
-                      ].filter((i) => String(i.id) !== String(id));
-                      return Promise.resolve();
-                    },
-                    clear: function () {
-                      if (!window._memoryStorage) window._memoryStorage = {};
-                      window._memoryStorage[name] = [];
-                      return Promise.resolve();
-                    },
-                    where: function () {
-                      return {
-                        equals: function () {
-                          return {
-                            toArray: function () {
-                              const items = window._memoryStorage?.[name] || [];
-                              return Promise.resolve(items);
-                            },
-                          };
-                        },
-                        below: function () {
-                          return {
-                            toArray: function () {
-                              const items = window._memoryStorage?.[name] || [];
-                              return Promise.resolve(items);
-                            },
-                          };
-                        },
-                      };
-                    },
-                  };
-                };
-                // Add hooks support
-                this.table().hook = {
-                  creating: function () {
-                    return this;
-                  },
-                };
-                this.products = this.table("products");
-                this.sales = this.table("sales");
-              };
-              // Initialize memory storage
-              if (!window._memoryStorage) {
-                window._memoryStorage = {
-                  products: [],
-                  sales: [],
-                };
-              }
-              resolve();
-              return;
-            }
+                return {
+                  from: function (table) {
+                    // Initialize store if not exists
+                    if (!FALLBACK_STORE[table]) {
+                      FALLBACK_STORE[table] = [];
+                    }
 
-            const script = document.createElement("script");
-            script.src = cdnUrls[index];
-            script.async = true;
-
-            script.onload = function () {
-              if (typeof Dexie !== "undefined") {
-                resolve();
-              } else if (attempts < 3) {
-                tryLoad(index + 1);
-              } else {
-                // Fallback to memory
-                console.warn("Dexie not available, using memory fallback");
-                // Simple Dexie mock
-                window.Dexie = function (dbName) {
-                  this.dbName = dbName;
-                  this.version = function () {
-                    return this;
-                  };
-                  this.stores = function () {
-                    return this;
-                  };
-                  this.open = function () {
-                    return Promise.resolve();
-                  };
-                  this.table = function (name) {
                     return {
-                      toArray: function () {
-                        return Promise.resolve(
-                          window._memoryStorage?.[name] || [],
-                        );
-                      },
-                      get: function (id) {
-                        const items = window._memoryStorage?.[name] || [];
-                        return Promise.resolve(
-                          items.find(
-                            (item) => String(item.id) === String(id),
-                          ) || null,
-                        );
-                      },
-                      put: function (item) {
-                        if (!window._memoryStorage) window._memoryStorage = {};
-                        if (!window._memoryStorage[name])
-                          window._memoryStorage[name] = [];
-                        const existing = window._memoryStorage[name].findIndex(
-                          (i) => String(i.id) === String(item.id),
-                        );
-                        if (existing >= 0) {
-                          window._memoryStorage[name][existing] = item;
-                        } else {
-                          window._memoryStorage[name].push(item);
-                        }
-                        return Promise.resolve(item.id);
-                      },
-                      bulkPut: function (items) {
-                        if (!window._memoryStorage) window._memoryStorage = {};
-                        if (!window._memoryStorage[name])
-                          window._memoryStorage[name] = [];
-                        items.forEach((item) => {
-                          const existing = window._memoryStorage[
-                            name
-                          ].findIndex((i) => String(i.id) === String(item.id));
-                          if (existing >= 0) {
-                            window._memoryStorage[name][existing] = item;
-                          } else {
-                            window._memoryStorage[name].push(item);
-                          }
-                        });
-                        return Promise.resolve();
-                      },
-                      delete: function (id) {
-                        if (!window._memoryStorage) window._memoryStorage = {};
-                        if (!window._memoryStorage[name])
-                          window._memoryStorage[name] = [];
-                        window._memoryStorage[name] = window._memoryStorage[
-                          name
-                        ].filter((i) => String(i.id) !== String(id));
-                        return Promise.resolve();
-                      },
-                      clear: function () {
-                        if (!window._memoryStorage) window._memoryStorage = {};
-                        window._memoryStorage[name] = [];
-                        return Promise.resolve();
-                      },
-                      where: function () {
+                      select: function (columns) {
+                        const self = this;
                         return {
-                          equals: function () {
+                          order: function (column, options) {
                             return {
-                              toArray: function () {
-                                return Promise.resolve(
-                                  window._memoryStorage?.[name] || [],
-                                );
+                              then: function (callback) {
+                                const data = FALLBACK_STORE[table] || [];
+                                // Sort data
+                                const sorted = [...data].sort((a, b) => {
+                                  if (options?.ascending === false) {
+                                    return b[column] > a[column] ? 1 : -1;
+                                  }
+                                  return a[column] > b[column] ? 1 : -1;
+                                });
+                                callback({ data: sorted, error: null });
+                                return { catch: function () {} };
                               },
                             };
                           },
-                          below: function () {
+                          eq: function (column, value) {
                             return {
-                              toArray: function () {
-                                return Promise.resolve(
-                                  window._memoryStorage?.[name] || [],
-                                );
+                              single: function () {
+                                return {
+                                  then: function (callback) {
+                                    const data = FALLBACK_STORE[table] || [];
+                                    const result = data.find(
+                                      (item) =>
+                                        String(item[column]) === String(value),
+                                    );
+                                    callback({
+                                      data: result || null,
+                                      error: null,
+                                    });
+                                    return { catch: function () {} };
+                                  },
+                                };
+                              },
+                              maybeSingle: function () {
+                                return {
+                                  then: function (callback) {
+                                    const data = FALLBACK_STORE[table] || [];
+                                    const result = data.find(
+                                      (item) =>
+                                        String(item[column]) === String(value),
+                                    );
+                                    callback({
+                                      data: result || null,
+                                      error: null,
+                                    });
+                                    return { catch: function () {} };
+                                  },
+                                };
+                              },
+                            };
+                          },
+                          gte: function (column, value) {
+                            return {
+                              lte: function (column2, value2) {
+                                return {
+                                  order: function (column3, options) {
+                                    return {
+                                      then: function (callback) {
+                                        const data =
+                                          FALLBACK_STORE[table] || [];
+                                        const filtered = data.filter((item) => {
+                                          const itemDate = new Date(
+                                            item[column],
+                                          );
+                                          const startDate = new Date(value);
+                                          const endDate = new Date(value2);
+                                          return (
+                                            itemDate >= startDate &&
+                                            itemDate <= endDate
+                                          );
+                                        });
+                                        callback({
+                                          data: filtered,
+                                          error: null,
+                                        });
+                                        return { catch: function () {} };
+                                      },
+                                    };
+                                  },
+                                };
+                              },
+                            };
+                          },
+                          lt: function (column, value) {
+                            return {
+                              order: function (column2, options) {
+                                return {
+                                  then: function (callback) {
+                                    const data = FALLBACK_STORE[table] || [];
+                                    const filtered = data.filter(
+                                      (item) => Number(item[column]) < value,
+                                    );
+                                    callback({ data: filtered, error: null });
+                                    return { catch: function () {} };
+                                  },
+                                };
+                              },
+                            };
+                          },
+                          or: function (filter) {
+                            return {
+                              order: function (column, options) {
+                                return {
+                                  then: function (callback) {
+                                    const data = FALLBACK_STORE[table] || [];
+                                    callback({ data: data, error: null });
+                                    return { catch: function () {} };
+                                  },
+                                };
+                              },
+                            };
+                          },
+                        };
+                      },
+                      insert: function (data) {
+                        const items = Array.isArray(data) ? data : [data];
+                        items.forEach((item) => {
+                          // Generate ID if not provided
+                          if (!item.id) {
+                            item.id =
+                              Date.now().toString() +
+                              "-" +
+                              Math.random().toString(36).substr(2, 9);
+                          }
+                          FALLBACK_STORE[table].push(item);
+                        });
+                        return {
+                          then: function (callback) {
+                            callback({ data: items, error: null });
+                            return { catch: function () {} };
+                          },
+                        };
+                      },
+                      upsert: function (data, options) {
+                        const items = Array.isArray(data) ? data : [data];
+                        items.forEach((item) => {
+                          // Generate ID if not provided
+                          if (!item.id) {
+                            item.id =
+                              Date.now().toString() +
+                              "-" +
+                              Math.random().toString(36).substr(2, 9);
+                          }
+                          // Check if exists
+                          const existingIndex = FALLBACK_STORE[table].findIndex(
+                            (existing) =>
+                              String(existing.id) === String(item.id),
+                          );
+                          if (existingIndex >= 0) {
+                            // Update
+                            FALLBACK_STORE[table][existingIndex] = {
+                              ...FALLBACK_STORE[table][existingIndex],
+                              ...item,
+                            };
+                          } else {
+                            // Insert
+                            FALLBACK_STORE[table].push(item);
+                          }
+                        });
+                        return {
+                          then: function (callback) {
+                            callback({ data: items, error: null });
+                            return { catch: function () {} };
+                          },
+                        };
+                      },
+                      update: function (data) {
+                        return {
+                          eq: function (column, value) {
+                            return {
+                              then: function (callback) {
+                                const items = FALLBACK_STORE[table] || [];
+                                const updated = [];
+                                items.forEach((item, index) => {
+                                  if (String(item[column]) === String(value)) {
+                                    FALLBACK_STORE[table][index] = {
+                                      ...item,
+                                      ...data,
+                                    };
+                                    updated.push(FALLBACK_STORE[table][index]);
+                                  }
+                                });
+                                callback({ data: updated, error: null });
+                                return { catch: function () {} };
+                              },
+                            };
+                          },
+                        };
+                      },
+                      delete: function () {
+                        return {
+                          eq: function (column, value) {
+                            return {
+                              then: function (callback) {
+                                if (FALLBACK_STORE[table]) {
+                                  FALLBACK_STORE[table] = FALLBACK_STORE[
+                                    table
+                                  ].filter(
+                                    (item) =>
+                                      String(item[column]) !== String(value),
+                                  );
+                                }
+                                callback({ data: null, error: null });
+                                return { catch: function () {} };
                               },
                             };
                           },
                         };
                       },
                     };
-                  };
-                  this.products = this.table("products");
-                  this.sales = this.table("sales");
+                  },
+                  auth: {
+                    signInWithPassword: function () {
+                      return Promise.resolve({
+                        data: { user: { id: "fallback-user" } },
+                        error: null,
+                      });
+                    },
+                    signOut: function () {
+                      return Promise.resolve({ error: null });
+                    },
+                    getUser: function () {
+                      return Promise.resolve({
+                        data: { user: { id: "fallback-user" } },
+                        error: null,
+                      });
+                    },
+                  },
+                  channel: function (name) {
+                    return {
+                      on: function (event, config, callback) {
+                        return this;
+                      },
+                      subscribe: function () {
+                        return this;
+                      },
+                    };
+                  },
                 };
-                if (!window._memoryStorage) {
-                  window._memoryStorage = {
-                    products: [],
-                    sales: [],
-                  };
-                }
-                resolve();
-              }
+              },
             };
 
-            script.onerror = function () {
-              tryLoad(index + 1);
-            };
-
-            document.head.appendChild(script);
+            // Also expose as supabase for compatibility
+            window.supabase = window.supabaseJs;
           }
 
-          tryLoad(0);
-        });
-      }
+          // Start loading - set a timeout in case the script doesn't load at all
+          const timeoutId = setTimeout(() => {
+            if (!loaded) {
+              console.warn("Supabase load timeout, using fallback");
+              if (!loaded) {
+                createFallbackClient();
+                loaded = true;
+                resolve();
+              }
+            }
+          }, 5000);
 
-      // Store the load promise globally
-      window.dexieLoadPromise = loadDexie();
+          document.head.appendChild(script);
+        });
+      })();
     </script>
+
     <script src="script.js"></script>
   </body>
 </html>

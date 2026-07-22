@@ -1,11 +1,15 @@
 // ============================================
-// BUD & BRUSH - Main Application with Dexie.js
+// BUD & BRUSH - Main Application with Supabase
 // ============================================
 
 // ----- CONFIGURATION -----
 const ADMIN_PASSWORD = "B&B420";
 const SESSION_KEY_AUTH = "bb_auth";
-const PETTY_CASH_START = 100;
+
+// Supabase Configuration - Replace with your credentials
+const SUPABASE_URL = "https://ghfkqospijjdgixporvy.supabase.co";
+const SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoZmtxb3NwaWpqZGdpeHBvcnZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NDE5NzYsImV4cCI6MjEwMDIxNzk3Nn0.rVOZJcbxMCiu-0O_OGrj9F_2aQZ4g77P17jVMoVPN6s";
 
 // ----- STATE -----
 let products = [];
@@ -13,8 +17,9 @@ let sales = [];
 let cart = [];
 let activeView = "pos";
 let isAuthenticated = false;
-let db = null;
 let isDataLoaded = false;
+let supabaseClient = null; // CHANGED: use supabaseClient instead of supabase
+let currentUser = null;
 
 // ----- DEFAULT PRODUCTS -----
 const defaultProducts = [
@@ -176,58 +181,96 @@ const defaultProducts = [
   },
 ];
 
-// ----- DEXIE DATABASE -----
-class BudAndBrushDB {
+// ============================================
+// SUPABASE DATABASE CLASS
+// ============================================
+class BudAndBrushSupabase {
   constructor() {
-    try {
-      if (typeof Dexie === "undefined") {
-        throw new Error("Dexie library not loaded");
-      }
-
-      this.db = new Dexie("BudAndBrushDB");
-      this.db.version(2).stores({
-        products: "id, name, category, type, stock, price",
-        sales:
-          "id, productId, productName, quantity, price, payment, total, date",
-      });
-
-      // Add hooks for data validation
-      this.db.products.hook("creating", function (primKey, obj) {
-        obj.price = Number(obj.price) || 0;
-        obj.stock = Number(obj.stock) || 0;
-        obj.bundles = obj.bundles || [];
-        return obj;
-      });
-
-      this.db.sales.hook("creating", function (primKey, obj) {
-        obj.quantity = Number(obj.quantity) || 0;
-        obj.price = Number(obj.price) || 0;
-        obj.total = Number(obj.total) || 0;
-        return obj;
-      });
-
-      this.initialized = false;
-    } catch (error) {
-      console.error("Database constructor error:", error);
-      throw error;
-    }
+    this.initialized = false;
+    this.client = null; // CHANGED: use client instead of supabase
   }
 
   async init() {
     try {
-      await this.db.open();
+      // Load Supabase client
+      if (typeof supabaseJs === "undefined") {
+        throw new Error("Supabase library not loaded");
+      }
+
+      // CHANGED: Use a different variable name
+      const { createClient } = supabaseJs;
+      this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      // Test connection
+      const { data, error } = await this.client
+        .from("products")
+        .select("count", { count: "exact", head: true });
+
+      if (error) throw error;
+
       this.initialized = true;
       return true;
     } catch (error) {
-      console.error("Database open error:", error);
+      console.error("Supabase initialization error:", error);
       return false;
     }
   }
 
-  // PRODUCTS
+  // ----- AUTHENTICATION -----
+  async signIn(email, password) {
+    try {
+      const { data, error } = await this.client.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      currentUser = data.user;
+      return { success: true, user: data.user };
+    } catch (error) {
+      console.error("Sign in error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async signOut() {
+    try {
+      const { error } = await this.client.auth.signOut();
+      if (error) throw error;
+      currentUser = null;
+      return { success: true };
+    } catch (error) {
+      console.error("Sign out error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getCurrentUser() {
+    try {
+      const {
+        data: { user },
+        error,
+      } = await this.client.auth.getUser();
+      if (error) throw error;
+      currentUser = user;
+      return user;
+    } catch (error) {
+      console.error("Get user error:", error);
+      return null;
+    }
+  }
+
+  // ----- PRODUCTS -----
   async getAllProducts() {
     try {
-      return await this.db.products.toArray();
+      const { data, error } = await this.client
+        .from("products")
+        .select("*")
+        .order("name");
+
+      if (error) throw error;
+      return data || [];
     } catch (error) {
       console.error("Error getting products:", error);
       return [];
@@ -236,43 +279,131 @@ class BudAndBrushDB {
 
   async getProduct(id) {
     try {
-      return await this.db.products.get(id);
+      const { data, error } = await this.client
+        .from("products")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+      return data;
     } catch (error) {
       console.error("Error getting product:", error);
       return null;
     }
   }
 
+  // Replace the saveProduct method with this:
   async saveProduct(product) {
     try {
-      product.price = Number(product.price) || 0;
-      product.stock = Number(product.stock) || 0;
-      product.bundles = product.bundles || [];
-      return await this.db.products.put(product);
+      // Ensure proper formatting
+      const formattedProduct = {
+        id: String(product.id),
+        name: product.name,
+        category: product.category,
+        type: product.type,
+        price: Number(product.price) || 0,
+        stock: Number(product.stock) || 0,
+        bundles: product.bundles || [],
+      };
+
+      console.log(
+        "Saving product:",
+        formattedProduct.id,
+        formattedProduct.name,
+      );
+
+      // Use upsert (works with both real Supabase and fallback)
+      const { data, error } = await this.client
+        .from("products")
+        .upsert(formattedProduct, { onConflict: "id" });
+
+      if (error) {
+        console.error("Upsert error:", error);
+        // Fallback: try insert then update
+        try {
+          const { error: insertError } = await this.client
+            .from("products")
+            .insert(formattedProduct);
+
+          if (insertError) {
+            // Try update
+            const { error: updateError } = await this.client
+              .from("products")
+              .update(formattedProduct)
+              .eq("id", formattedProduct.id);
+
+            if (updateError) {
+              throw updateError;
+            }
+          }
+        } catch (fallbackError) {
+          console.error("Fallback save error:", fallbackError);
+          throw fallbackError;
+        }
+      }
+
+      return product.id;
     } catch (error) {
       console.error("Error saving product:", error);
       throw error;
     }
   }
 
+  // Replace the saveProducts method with this:
   async saveProducts(products) {
     try {
-      products = products.map((p) => ({
-        ...p,
+      console.log("Saving multiple products:", products.length);
+
+      // Format all products
+      const formattedProducts = products.map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        category: p.category,
+        type: p.type,
         price: Number(p.price) || 0,
         stock: Number(p.stock) || 0,
         bundles: p.bundles || [],
       }));
-      return await this.db.products.bulkPut(products);
+
+      // Try bulk upsert
+      const { data, error } = await this.client
+        .from("products")
+        .upsert(formattedProducts, { onConflict: "id" });
+
+      if (error) {
+        console.error("Bulk upsert error:", error);
+        // Fallback: process individually
+        for (const product of formattedProducts) {
+          await this.saveProduct(product);
+        }
+      }
+
+      return true;
     } catch (error) {
       console.error("Error saving products:", error);
-      throw error;
+      // Last resort: try each product individually
+      try {
+        for (const product of products) {
+          await this.saveProduct(product);
+        }
+        return true;
+      } catch (finalError) {
+        console.error("Final fallback failed:", finalError);
+        throw finalError;
+      }
     }
   }
 
   async deleteProduct(id) {
     try {
-      return await this.db.products.delete(id);
+      const { error } = await this.client
+        .from("products")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      return true;
     } catch (error) {
       console.error("Error deleting product:", error);
       throw error;
@@ -280,17 +411,19 @@ class BudAndBrushDB {
   }
 
   async searchProducts(query) {
-    if (!query) return await this.getAllProducts();
     try {
-      const lowerQuery = query.toLowerCase();
-      return await this.db.products
-        .filter(
-          (p) =>
-            p.name.toLowerCase().includes(lowerQuery) ||
-            p.category.toLowerCase().includes(lowerQuery) ||
-            p.type.toLowerCase().includes(lowerQuery),
+      if (!query) return await this.getAllProducts();
+
+      const { data, error } = await this.client
+        .from("products")
+        .select("*")
+        .or(
+          `name.ilike.%${query}%,category.ilike.%${query}%,type.ilike.%${query}%`,
         )
-        .toArray();
+        .order("name");
+
+      if (error) throw error;
+      return data || [];
     } catch (error) {
       console.error("Error searching products:", error);
       return [];
@@ -299,7 +432,14 @@ class BudAndBrushDB {
 
   async getLowStockProducts(threshold = 10) {
     try {
-      return await this.db.products.where("stock").below(threshold).toArray();
+      const { data, error } = await this.client
+        .from("products")
+        .select("*")
+        .lt("stock", threshold)
+        .order("stock");
+
+      if (error) throw error;
+      return data || [];
     } catch (error) {
       console.error("Error getting low stock products:", error);
       return [];
@@ -308,20 +448,30 @@ class BudAndBrushDB {
 
   async getProductsByCategory(category) {
     try {
-      return await this.db.products
-        .where("category")
-        .equals(category)
-        .toArray();
+      const { data, error } = await this.client
+        .from("products")
+        .select("*")
+        .eq("category", category)
+        .order("name");
+
+      if (error) throw error;
+      return data || [];
     } catch (error) {
       console.error("Error getting products by category:", error);
       return [];
     }
   }
 
-  // SALES
+  // ----- SALES -----
   async getAllSales() {
     try {
-      return await this.db.sales.toArray();
+      const { data, error } = await this.client
+        .from("sales")
+        .select("*")
+        .order("date", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     } catch (error) {
       console.error("Error getting sales:", error);
       return [];
@@ -330,7 +480,14 @@ class BudAndBrushDB {
 
   async getSale(id) {
     try {
-      return await this.db.sales.get(id);
+      const { data, error } = await this.client
+        .from("sales")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+      return data;
     } catch (error) {
       console.error("Error getting sale:", error);
       return null;
@@ -342,7 +499,11 @@ class BudAndBrushDB {
       sale.quantity = Number(sale.quantity) || 0;
       sale.price = Number(sale.price) || 0;
       sale.total = Number(sale.total) || 0;
-      return await this.db.sales.put(sale);
+
+      const { error } = await this.client.from("sales").insert(sale);
+
+      if (error) throw error;
+      return sale.id;
     } catch (error) {
       console.error("Error saving sale:", error);
       throw error;
@@ -351,13 +512,10 @@ class BudAndBrushDB {
 
   async saveSales(sales) {
     try {
-      sales = sales.map((s) => ({
-        ...s,
-        quantity: Number(s.quantity) || 0,
-        price: Number(s.price) || 0,
-        total: Number(s.total) || 0,
-      }));
-      return await this.db.sales.bulkPut(sales);
+      for (const sale of sales) {
+        await this.saveSale(sale);
+      }
+      return true;
     } catch (error) {
       console.error("Error saving sales:", error);
       throw error;
@@ -366,7 +524,10 @@ class BudAndBrushDB {
 
   async deleteSale(id) {
     try {
-      return await this.db.sales.delete(id);
+      const { error } = await this.client.from("sales").delete().eq("id", id);
+
+      if (error) throw error;
+      return true;
     } catch (error) {
       console.error("Error deleting sale:", error);
       throw error;
@@ -375,11 +536,15 @@ class BudAndBrushDB {
 
   async getSalesByDate(startDate, endDate) {
     try {
-      const allSales = await this.getAllSales();
-      return allSales.filter((s) => {
-        const d = new Date(s.date);
-        return d >= startDate && d <= endDate;
-      });
+      const { data, error } = await this.client
+        .from("sales")
+        .select("*")
+        .gte("date", startDate.toISOString())
+        .lte("date", endDate.toISOString())
+        .order("date", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     } catch (error) {
       console.error("Error getting sales by date:", error);
       return [];
@@ -388,7 +553,14 @@ class BudAndBrushDB {
 
   async getSalesByPayment(payment) {
     try {
-      return await this.db.sales.where("payment").equals(payment).toArray();
+      const { data, error } = await this.client
+        .from("sales")
+        .select("*")
+        .eq("payment", payment)
+        .order("date", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     } catch (error) {
       console.error("Error getting sales by payment:", error);
       return [];
@@ -402,13 +574,15 @@ class BudAndBrushDB {
       const end = new Date(date);
       end.setHours(23, 59, 59, 999);
 
-      const allSales = await this.getAllSales();
-      const filtered = allSales.filter((s) => {
-        const d = new Date(s.date);
-        return d >= start && d <= end;
-      });
+      const { data, error } = await this.client
+        .from("sales")
+        .select("total")
+        .gte("date", start.toISOString())
+        .lte("date", end.toISOString());
 
-      return filtered.reduce((sum, s) => sum + (s.total || 0), 0);
+      if (error) throw error;
+
+      return data.reduce((sum, s) => sum + (s.total || 0), 0);
     } catch (error) {
       console.error("Error getting daily revenue:", error);
       return 0;
@@ -417,9 +591,14 @@ class BudAndBrushDB {
 
   async getRevenueByPayment(payment) {
     try {
-      const allSales = await this.getAllSales();
-      const filtered = allSales.filter((s) => s.payment === payment);
-      return filtered.reduce((sum, s) => sum + (s.total || 0), 0);
+      const { data, error } = await this.client
+        .from("sales")
+        .select("total")
+        .eq("payment", payment);
+
+      if (error) throw error;
+
+      return data.reduce((sum, s) => sum + (s.total || 0), 0);
     } catch (error) {
       console.error("Error getting revenue by payment:", error);
       return 0;
@@ -428,10 +607,16 @@ class BudAndBrushDB {
 
   async getTopProducts(limit = 5) {
     try {
-      const allSales = await this.getAllSales();
-      const productMap = new Map();
+      // Get all sales
+      const { data: salesData, error } = await this.client
+        .from("sales")
+        .select("productId, productName, quantity, total");
 
-      allSales.forEach((sale) => {
+      if (error) throw error;
+
+      // Aggregate in memory
+      const productMap = new Map();
+      salesData.forEach((sale) => {
         if (!productMap.has(sale.productId)) {
           productMap.set(sale.productId, {
             id: sale.productId,
@@ -454,47 +639,7 @@ class BudAndBrushDB {
     }
   }
 
-  // MAINTENANCE
-  async clearAll() {
-    try {
-      await this.db.products.clear();
-      await this.db.sales.clear();
-    } catch (error) {
-      console.error("Error clearing database:", error);
-    }
-  }
-
-  async exportData() {
-    try {
-      const products = await this.getAllProducts();
-      const sales = await this.getAllSales();
-      return {
-        products,
-        sales,
-        exportedAt: new Date().toISOString(),
-        version: "2.0",
-      };
-    } catch (error) {
-      console.error("Error exporting data:", error);
-      return null;
-    }
-  }
-
-  async importData(data) {
-    try {
-      if (data.products && data.products.length > 0) {
-        await this.saveProducts(data.products);
-      }
-      if (data.sales && data.sales.length > 0) {
-        await this.saveSales(data.sales);
-      }
-      return true;
-    } catch (error) {
-      console.error("Error importing data:", error);
-      return false;
-    }
-  }
-
+  // ----- STATS -----
   async getStats() {
     try {
       const products = await this.getAllProducts();
@@ -519,31 +664,78 @@ class BudAndBrushDB {
       };
     }
   }
+
+  // ----- REAL-TIME SUBSCRIPTIONS -----
+  subscribeToProducts(callback) {
+    return this.client
+      .channel("products_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "products",
+        },
+        (payload) => {
+          callback(payload);
+        },
+      )
+      .subscribe();
+  }
+
+  subscribeToSales(callback) {
+    return this.client
+      .channel("sales_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "sales",
+        },
+        (payload) => {
+          callback(payload);
+        },
+      )
+      .subscribe();
+  }
 }
 
-// ----- INITIALIZE DATABASE -----
+// ============================================
+// INITIALIZE SUPABASE
+// ============================================
 let database = null;
 
 async function initDatabase() {
   try {
-    if (window.dexieLoadPromise) {
-      await window.dexieLoadPromise;
+    // Load Supabase client
+    if (window.supabaseLoadPromise) {
+      await window.supabaseLoadPromise;
     }
 
-    if (typeof Dexie === "undefined") {
-      throw new Error("Dexie library not available after loading");
+    if (typeof supabaseJs === "undefined") {
+      throw new Error("Supabase library not loaded");
     }
 
-    database = new BudAndBrushDB();
-    const opened = await database.init();
+    database = new BudAndBrushSupabase();
+    const initialized = await database.init();
 
-    if (!opened) {
-      throw new Error("Failed to open database");
+    if (!initialized) {
+      throw new Error("Failed to initialize Supabase");
     }
 
+    // Check if products exist, if not load defaults
     const existingProducts = await database.getAllProducts();
+    console.log("Existing products:", existingProducts.length);
+
     if (existingProducts.length === 0) {
+      console.log("No products found, seeding default data...");
       await database.saveProducts(defaultProducts);
+      console.log("Default products seeded successfully!");
+
+      // Verify the data was inserted
+      const verifyProducts = await database.getAllProducts();
+      console.log("Products after seeding:", verifyProducts.length);
     }
 
     return true;
@@ -553,7 +745,6 @@ async function initDatabase() {
     return false;
   }
 }
-
 // ----- HELPERS -----
 function normalizeProduct(p) {
   if (!p) return null;
@@ -724,7 +915,6 @@ function renderCart() {
       const product = getProductById(item.productId);
       if (!product) return "";
 
-      // Get the current price from the item or default to calculated price
       const currentPrice =
         item.customPrice !== undefined
           ? item.customPrice
@@ -771,7 +961,6 @@ function renderCart() {
   subtotalEl.textContent = currency(subtotal);
   countEl.textContent = `${cart.reduce((s, i) => s + i.quantity, 0)} items`;
 
-  // Event listeners for remove buttons
   list.querySelectorAll("[data-remove]").forEach((btn) => {
     btn.addEventListener("click", () => {
       cart = cart.filter((i) => String(i.productId) !== btn.dataset.remove);
@@ -779,7 +968,6 @@ function renderCart() {
     });
   });
 
-  // Event listeners for quantity updates
   list.querySelectorAll("[data-update]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.update;
@@ -790,7 +978,6 @@ function renderCart() {
         if (item.quantity <= 0) {
           cart = cart.filter((i) => String(i.productId) !== id);
         } else {
-          // If quantity changes, adjust custom price proportionally
           const product = getProductById(id);
           if (product) {
             const defaultPrice = calculatePrice(product, item.quantity);
@@ -811,7 +998,6 @@ function renderCart() {
     });
   });
 
-  // Event listeners for price inputs
   list.querySelectorAll(".cart-price-input").forEach((input) => {
     input.addEventListener("input", function () {
       const productId = this.dataset.productId;
@@ -823,13 +1009,11 @@ function renderCart() {
       }
     });
 
-    // Focus and select all text on click
     input.addEventListener("focus", function () {
       this.select();
     });
   });
 
-  // Event listeners for reset price buttons
   list.querySelectorAll(".reset-price-btn").forEach((btn) => {
     btn.addEventListener("click", function () {
       const productId = this.dataset.productId;
@@ -843,7 +1027,6 @@ function renderCart() {
   });
 }
 
-// Helper function to update subtotal without re-rendering
 function updateCartSubtotal() {
   let subtotal = 0;
   cart.forEach((item) => {
@@ -957,7 +1140,6 @@ function renderDashboard() {
   document.getElementById("dashboardEftSales").textContent = currency(eft);
   document.getElementById("dashboardUberzol").textContent = currency(uberzol);
 
-  // Payment breakdown
   const breakdown = [
     { label: "Cash", value: cash, total: revenue },
     { label: "Yoco", value: yoco, total: revenue },
@@ -980,7 +1162,6 @@ function renderDashboard() {
       .join("");
   }
 
-  // Top products
   const salesByProduct = products
     .map((p) => ({
       name: p.name,
@@ -1003,7 +1184,6 @@ function renderDashboard() {
       : '<div class="empty-state">No contributions recorded yet.</div>';
   }
 
-  // Stock alerts
   const low = products
     .filter((p) => p.stock < 10)
     .sort((a, b) => a.stock - b.stock);
@@ -1110,7 +1290,6 @@ async function checkout() {
     }
     product.stock -= item.quantity;
 
-    // Use custom price if set, otherwise calculate with bundles
     const total =
       item.customPrice !== undefined
         ? item.customPrice
@@ -1375,16 +1554,16 @@ async function initializeApp() {
 
   await loadData();
   renderAll();
-  setSyncStatus("Ready - offline mode", "success");
+  setSyncStatus("Ready - connected to Supabase", "success");
 }
 
 // ----- INIT -----
 async function init() {
-  if (window.dexieLoadPromise) {
+  if (window.supabaseLoadPromise) {
     try {
-      await window.dexieLoadPromise;
+      await window.supabaseLoadPromise;
     } catch (error) {
-      console.warn("Dexie load issue:", error);
+      console.warn("Supabase load issue:", error);
     }
   }
 
@@ -1414,8 +1593,6 @@ async function init() {
     .getElementById("productSearch")
     .addEventListener("input", renderProducts);
   document.getElementById("checkoutBtn").addEventListener("click", checkout);
-
-  // Payment method handler - no special handling needed, price editing is always available
   document
     .getElementById("paymentMethod")
     .addEventListener("change", function () {
@@ -1451,5 +1628,5 @@ async function init() {
 // Start the app when DOM is ready
 document.addEventListener("DOMContentLoaded", init);
 
-console.log("🌿 Bud & Brush application loaded");
-console.log("✅ Price editing enabled - click any price in cart to modify");
+console.log("🌿 Bud & Brush application loaded with Supabase");
+console.log("✅ Data is stored remotely and accessible from anywhere");
