@@ -512,37 +512,32 @@ class BudAndBrushSupabase {
       sale.price = Number(sale.price) || 0;
       sale.total = Number(sale.total) || 0;
 
-      // Use lowercase column names to match your database
       const saleData = {
-        id: sale.id,
-        productid: sale.productid, // Changed from productId to productid
-        productname: sale.productname, // Changed from productName to productname
-        quantity: sale.quantity,
-        price: sale.price,
-        payment: sale.payment,
-        total: sale.total,
+        productid: String(sale.productid || ""),
+        productname: String(sale.productname || ""),
+        quantity: Number(sale.quantity) || 0,
+        price: Number(sale.price) || 0,
+        payment: String(sale.payment || "Cash"),
+        total: Number(sale.total) || 0,
         date: sale.date || new Date().toISOString(),
       };
 
       // Only add note if it exists
       if (sale.note) {
-        saleData.note = sale.note;
+        saleData.note = String(sale.note);
       }
 
-      console.log("Attempting to insert sale:", saleData);
+      console.log("Saving sale:", saleData);
 
       const { data, error } = await this.client
         .from("sales")
         .insert(saleData)
         .select();
 
-      if (error) {
-        console.error("Insert error:", error);
-        throw error;
-      }
+      if (error) throw error;
 
-      console.log("Sale saved successfully:", data);
-      return sale.id;
+      console.log("Sale saved successfully with ID:", data?.[0]?.id);
+      return data?.[0]?.id;
     } catch (error) {
       console.error("Error saving sale:", error);
       throw error;
