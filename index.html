@@ -110,12 +110,13 @@
                   <div id="uberzolSubtotalGroup" style="display: none">
                     <div
                       class="d-flex justify-content-between align-items-center mt-3 p-2 border rounded"
-                      style="background: #f8fafc"
+                      style="background: var(--bg-secondary)"
                     >
                       <div>
                         <span class="badge bg-info ms-2">Store Earnings</span>
                       </div>
                       <div class="d-flex align-items-center gap-2">
+                        <span class="currency-symbol">R</span>
                         <input
                           type="number"
                           id="uberzolSubtotalInput"
@@ -127,7 +128,7 @@
                             width: 120px;
                             text-align: right;
                             font-weight: 600;
-                            color: #0f766e;
+                            color: #7c3aed;
                           "
                         />
                         <button
@@ -191,10 +192,10 @@
               <div class="card p-3">
                 <h3 class="mb-3">Edit item</h3>
                 <form id="productForm">
-                  <input type="hidden" id="productid" />
+                  <input type="hidden" id="productId" />
                   <div class="mb-3">
                     <label class="form-label">Name</label>
-                    <input id="productname" class="form-control" required />
+                    <input id="productName" class="form-control" required />
                   </div>
                   <div class="row g-3">
                     <div class="col-md-6">
