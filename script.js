@@ -302,7 +302,11 @@ class BudAndBrushSupabase {
         bundles: product.bundles || [],
       };
 
-      console.log("Saving product:", formattedProduct.id, formattedProduct.name);
+      console.log(
+        "Saving product:",
+        formattedProduct.id,
+        formattedProduct.name,
+      );
 
       const { data, error } = await this.client
         .from("products")
@@ -1708,6 +1712,179 @@ async function initializeApp() {
   setSyncStatus("Ready - connected to Supabase", "success");
 }
 
+// ----- CLEAR DAY FUNCTION -----
+function showClearDayModal() {
+  // Create modal if it doesn't exist
+  let modal = document.getElementById("clearDayModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "clearDayModal";
+    modal.className = "confirmation-modal-overlay";
+    modal.innerHTML = `
+      <div class="confirmation-modal">
+        <h3 class="text-danger">
+          <i class="fas fa-exclamation-triangle me-2"></i>
+          Clear Today's Sales?
+        </h3>
+        <p class="text-muted">
+          This will permanently delete <strong>ALL</strong> sales records for today 
+          (${new Date().toLocaleDateString(undefined, {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}).
+        </p>
+        <p class="text-muted small">
+          <i class="fas fa-info-circle me-1"></i>
+          Product stock levels will <strong>NOT</strong> be restored.
+        </p>
+        <div class="modal-actions">
+          <button id="cancelClearDay" class="btn btn-outline-secondary">Cancel</button>
+          <button id="confirmClearDay" class="btn btn-danger">
+            <i class="fas fa-trash-alt me-2"></i>
+            Clear Today
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Add event listeners
+    modal
+      .querySelector("#cancelClearDay")
+      .addEventListener("click", hideClearDayModal);
+    modal
+      .querySelector("#confirmClearDay")
+      .addEventListener("click", confirmClearDay);
+
+    // Close on overlay click
+    modal.addEventListener("click", function (e) {
+      if (e.target === this) hideClearDayModal();
+    });
+
+    // Close on Escape key
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") hideClearDayModal();
+    });
+  }
+
+  modal.classList.add("active");
+}
+
+function hideClearDayModal() {
+  const modal = document.getElementById("clearDayModal");
+  if (modal) modal.classList.remove("active");
+}
+
+async function confirmClearDay() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    // Filter sales for today
+    const todaySales = sales.filter((s) => s.date?.startsWith(today));
+
+    if (todaySales.length === 0) {
+      showToast("No sales found", "No sales records for today to clear.");
+      hideClearDayModal();
+      return;
+    }
+
+    console.log(`Clearing ${todaySales.length} sales for ${today}...`);
+
+    // Delete each sale from the database
+    for (const sale of todaySales) {
+      await database.deleteSale(sale.id);
+    }
+
+    // Remove from local sales array
+    sales = sales.filter((s) => !s.date?.startsWith(today));
+
+    // Save the updated sales
+    await saveSales();
+
+    // Update UI
+    renderAll();
+
+    // Show success message
+    showToast(
+      "Day Cleared! 🧹",
+      `Successfully cleared ${todaySales.length} sales records for ${new Date().toLocaleDateString(
+        undefined,
+        {
+          weekday: "long",
+          month: "short",
+          day: "numeric",
+        },
+      )}`,
+    );
+
+    hideClearDayModal();
+    setSyncStatus(`Cleared ${todaySales.length} sales for today`, "success");
+  } catch (error) {
+    console.error("Error clearing day:", error);
+    showToast("Error", "Failed to clear sales. Please try again.", "error");
+  }
+}
+
+// ----- TOAST NOTIFICATION -----
+function showToast(title, message, type = "success") {
+  // Create toast if it doesn't exist
+  let toast = document.getElementById("toastNotification");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toastNotification";
+    toast.className = "toast-notification";
+    toast.innerHTML = `
+      <div class="toast-icon">
+        <i class="fas fa-check-circle"></i>
+      </div>
+      <div class="toast-content">
+        <div class="toast-title"></div>
+        <div class="toast-message"></div>
+      </div>
+    `;
+    document.body.appendChild(toast);
+  }
+
+  // Set content
+  const icon = toast.querySelector(".toast-icon i");
+  const titleEl = toast.querySelector(".toast-title");
+  const messageEl = toast.querySelector(".toast-message");
+
+  toast.className = "toast-notification";
+
+  if (type === "error") {
+    toast.classList.add("error");
+    icon.className = "fas fa-exclamation-circle";
+    icon.style.color = "#e17055";
+    toast.style.borderLeftColor = "#e17055";
+  } else {
+    toast.classList.add("success");
+    icon.className = "fas fa-check-circle";
+    icon.style.color = "#00b894";
+    toast.style.borderLeftColor = "#00b894";
+  }
+
+  titleEl.textContent = title;
+  messageEl.textContent = message;
+
+  // Show toast
+  toast.classList.add("show");
+
+  // Auto hide after 5 seconds
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => {
+    toast.classList.remove("show");
+  }, 5000);
+
+  // Click to dismiss
+  toast.onclick = function () {
+    this.classList.remove("show");
+    clearTimeout(this._timeout);
+  };
+}
+
 // ----- INIT -----
 async function init() {
   if (window.supabaseLoadPromise) {
@@ -1829,6 +2006,11 @@ async function init() {
     .getElementById("exportSalesBtn")
     .addEventListener("click", exportSalesCsv);
 }
+
+// Clear day button
+document
+  .getElementById("clearDayBtn")
+  .addEventListener("click", showClearDayModal);
 
 // Start the app when DOM is ready
 document.addEventListener("DOMContentLoaded", init);

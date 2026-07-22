@@ -635,6 +635,161 @@ body {
   flex-shrink: 0;
 }
 
+/* Clear Day Button */
+#clearDayBtn {
+  padding: 0.6rem 1.5rem;
+  font-weight: 600;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #e17055, #d63031);
+  color: white;
+  box-shadow:
+    6px 6px 12px var(--shadow-dark),
+    -6px -6px 12px var(--shadow-light);
+  transition: all 0.3s ease;
+  border: none;
+}
+
+#clearDayBtn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    8px 8px 16px var(--shadow-dark),
+    -8px -8px 16px var(--shadow-light);
+  opacity: 0.9;
+}
+
+#clearDayBtn:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 4px 4px 8px var(--shadow-dark),
+    inset -4px -4px 8px var(--shadow-light);
+}
+
+/* Confirmation Modal */
+.confirmation-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.confirmation-modal-overlay.active {
+  display: flex;
+}
+
+.confirmation-modal {
+  background: var(--bg-card);
+  border-radius: 24px;
+  padding: 2rem;
+  max-width: 440px;
+  width: 90%;
+  box-shadow:
+    20px 20px 40px var(--shadow-dark),
+    -20px -20px 40px var(--shadow-light);
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.confirmation-modal h3 {
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.confirmation-modal p {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+}
+
+.confirmation-modal .modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.confirmation-modal .modal-actions .btn {
+  min-width: 100px;
+}
+
+.confirmation-modal .text-danger {
+  color: #e17055 !important;
+}
+
+.confirmation-modal .text-muted {
+  color: var(--text-secondary) !important;
+}
+
+/* Success Toast */
+.toast-notification {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  z-index: 10001;
+  padding: 1rem 1.5rem;
+  border-radius: 16px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow:
+    12px 12px 24px var(--shadow-dark),
+    -12px -12px 24px var(--shadow-light);
+  display: none;
+  align-items: center;
+  gap: 0.75rem;
+  animation: slideUp 0.4s ease;
+  max-width: 400px;
+}
+
+.toast-notification.show {
+  display: flex;
+}
+
+.toast-notification.success {
+  border-left: 4px solid #00b894;
+}
+
+.toast-notification .toast-icon {
+  font-size: 1.5rem;
+  color: #00b894;
+}
+
+.toast-notification .toast-content {
+  flex: 1;
+}
+
+.toast-notification .toast-content .toast-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.toast-notification .toast-content .toast-message {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Responsive styles */
 @media (max-width: 768px) {
   .topbar {
