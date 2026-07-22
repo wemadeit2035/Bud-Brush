@@ -475,8 +475,8 @@ class BudAndBrushSupabase {
       // Map database column names back to camelCase for the app
       return (data || []).map((item) => ({
         id: item.id,
-        productId: item.productid, // Map productid to productId
-        productName: item.productname, // Map productname to productName
+        productid: item.productid, // Map productid to productId
+        productname: item.productname, // Map productname to productName
         quantity: item.quantity,
         price: item.price,
         payment: item.payment,
