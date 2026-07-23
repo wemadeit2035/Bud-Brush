@@ -14,6 +14,7 @@ const SUPABASE_ANON_KEY =
 // ----- STATE -----
 let products = [];
 let sales = [];
+let transactions = [];
 let cart = [];
 let activeView = "pos";
 let isAuthenticated = false;
@@ -422,32 +423,6 @@ class BudAndBrushSupabase {
   }
 
   // ----- SALES -----
-  async getAllSales() {
-    try {
-      const { data, error } = await this.client
-        .from("sales")
-        .select("*")
-        .order("date", { ascending: false });
-
-      if (error) throw error;
-
-      // Map database column names (lowercase) to app column names (camelCase)
-      return (data || []).map((item) => ({
-        id: item.id,
-        productId: item.productid,
-        productName: item.productname,
-        quantity: item.quantity,
-        price: item.price,
-        payment: item.payment,
-        total: item.total,
-        date: item.date,
-        note: item.note,
-      }));
-    } catch (error) {
-      console.error("Error getting sales:", error);
-      return [];
-    }
-  }
 
   async getSale(id) {
     try {
@@ -626,6 +601,106 @@ class BudAndBrushSupabase {
         .slice(0, limit);
     } catch (error) {
       console.error("Error getting top products:", error);
+      return [];
+    }
+  }
+
+  // ============================================
+  // TRANSACTION FUNCTIONS
+  // ============================================
+
+  // Add this to your BudAndBrushSupabase class
+  async saveTransaction(transaction) {
+    try {
+      const { data: txData, error: txError } = await this.client
+        .from("transactions")
+        .insert({
+          transaction_date: transaction.date || new Date().toISOString(),
+          payment: transaction.payment,
+          subtotal: transaction.subtotal,
+          discount: transaction.discount || 0,
+          total: transaction.total,
+          note: transaction.note || null,
+          item_count: transaction.items.length,
+        })
+        .select()
+        .single();
+
+      if (txError) throw txError;
+
+      // Insert all items
+      const items = transaction.items.map((item) => ({
+        transaction_id: txData.id,
+        product_id: item.productId,
+        product_name: item.productName,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        line_total: item.lineTotal,
+        is_bundle: item.isBundle || false,
+        bundle_discount: item.bundleDiscount || 0,
+      }));
+
+      const { error: itemsError } = await this.client
+        .from("transaction_items")
+        .insert(items);
+
+      if (itemsError) throw itemsError;
+
+      return txData.id;
+    } catch (error) {
+      console.error("Error saving transaction:", error);
+      throw error;
+    }
+  }
+
+  async getAllTransactions() {
+    try {
+      // Get all transactions
+      const { data: transactions, error: txError } = await this.client
+        .from("transactions")
+        .select("*")
+        .order("transaction_date", { ascending: false });
+
+      if (txError) throw txError;
+
+      // Get all transaction items
+      const { data: items, error: itemsError } = await this.client
+        .from("transaction_items")
+        .select("*");
+
+      if (itemsError) throw itemsError;
+
+      // Group items by transaction
+      const itemsByTransaction = {};
+      items.forEach((item) => {
+        if (!itemsByTransaction[item.transaction_id]) {
+          itemsByTransaction[item.transaction_id] = [];
+        }
+        itemsByTransaction[item.transaction_id].push({
+          productId: item.product_id,
+          productName: item.product_name,
+          quantity: item.quantity,
+          unitPrice: item.unit_price,
+          lineTotal: item.line_total,
+          isBundle: item.is_bundle,
+          bundleDiscount: item.bundle_discount,
+        });
+      });
+
+      // Combine transactions with their items
+      return transactions.map((tx) => ({
+        id: tx.id,
+        date: tx.transaction_date,
+        payment: tx.payment,
+        subtotal: tx.subtotal,
+        discount: tx.discount,
+        total: tx.total,
+        note: tx.note,
+        itemCount: tx.item_count,
+        items: itemsByTransaction[tx.id] || [],
+      }));
+    } catch (error) {
+      console.error("Error getting transactions:", error);
       return [];
     }
   }
@@ -809,15 +884,44 @@ function calculatePrice(product, quantity) {
 // ----- LOAD DATA FROM DATABASE -----
 async function loadData() {
   try {
+    // Load products
     const dbProducts = await database.getAllProducts();
     products = dbProducts.map(normalizeProduct).filter(Boolean);
+    console.log(`Loaded ${products.length} products`);
 
-    const dbSales = await database.getAllSales();
-    sales = dbSales.map(normalizeSale).filter(Boolean);
+    // Load transactions (new sales system)
+    try {
+      transactions = await database.getAllTransactions();
+      console.log(`Loaded ${transactions.length} transactions`);
+
+      // Convert to sales format for backward compatibility
+      sales = [];
+      transactions.forEach((tx) => {
+        tx.items.forEach((item) => {
+          sales.push({
+            id: tx.id,
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            price: item.unitPrice,
+            payment: tx.payment,
+            total: item.lineTotal,
+            date: tx.date,
+            note: tx.note,
+            isBundle: item.isBundle,
+            bundleDiscount: item.bundleDiscount,
+          });
+        });
+      });
+    } catch (error) {
+      console.warn("Could not load transactions, starting fresh:", error);
+      transactions = [];
+      sales = [];
+    }
 
     isDataLoaded = true;
     setSyncStatus(
-      `Loaded ${products.length} items and ${sales.length} contributions`,
+      `Loaded ${products.length} items and ${transactions.length} transactions`,
       "success",
     );
     return true;
@@ -1099,39 +1203,104 @@ function renderSalesHistory() {
   const filter = document.getElementById("salesPaymentFilter").value;
   const search = document.getElementById("salesSearch").value.toLowerCase();
 
-  const filtered = sales.filter((s) => {
-    const matchPayment = filter === "all" || s.payment === filter;
-    const matchSearch = `${s.productName} ${s.payment}`
-      .toLowerCase()
-      .includes(search);
+  // Check if transactions exists and has data
+  if (!transactions || transactions.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="5"><div class="empty-state">No transactions recorded yet.</div></td></tr>';
+    return;
+  }
+
+  const filtered = transactions.filter((tx) => {
+    const matchPayment = filter === "all" || tx.payment === filter;
+    const matchSearch = tx.items.some((item) =>
+      item.productName.toLowerCase().includes(search),
+    );
     return matchPayment && matchSearch;
   });
 
   if (!filtered.length) {
     tbody.innerHTML =
-      '<tr><td colspan="5"><div class="empty-state">No contributions match the filters yet.</div></td></tr>';
+      '<tr><td colspan="5"><div class="empty-state">No transactions match the filters.</div></td></tr>';
     return;
   }
 
   tbody.innerHTML = filtered
     .slice()
     .reverse()
-    .map((s) => {
+    .map((tx) => {
+      // Build items summary with price comparison for each item
+      const itemsSummary = tx.items
+        .map((item) => {
+          const originalPrice = item.unitPrice * item.quantity;
+          const paidPrice = item.lineTotal;
+          const isPriceEdited = paidPrice !== originalPrice;
+          const priceDiff = originalPrice - paidPrice;
+          const isDiscount = priceDiff > 0;
+          const isMarkup = priceDiff < 0;
+
+          let priceDisplay = "";
+
+          if (isPriceEdited) {
+            // Show crossed out original price with new price
+            if (isDiscount) {
+              // Discount - show original crossed out, new price in green
+              priceDisplay = `
+              <span class="price-strikethrough">${currency(originalPrice)}</span>
+              <span class="text-success fw-bold">${currency(paidPrice)}</span>
+              <span class="text-success small">(-${currency(Math.abs(priceDiff))})</span>
+            `;
+            } else if (isMarkup) {
+              // Markup - show original crossed out, new price in red/orange
+              priceDisplay = `
+              <span class="price-strikethrough">${currency(originalPrice)}</span>
+              <span class="text-warning fw-bold">${currency(paidPrice)}</span>
+              <span class="text-warning small">(+${currency(Math.abs(priceDiff))})</span>
+            `;
+            }
+          } else {
+            // No price change - show normal price
+            priceDisplay = `<span>${currency(paidPrice)}</span>`;
+          }
+
+          let tags = "";
+          if (item.isBundle) tags += " 🎯";
+          if (item.customPrice) tags += " ✏️";
+
+          return `${item.quantity}x ${item.productName}${tags} → ${priceDisplay}`;
+        })
+        .join(", ");
+
       const badgeClass =
-        s.payment === "Cash"
+        tx.payment === "Cash"
           ? "badge-cash"
-          : s.payment === "Yoco"
+          : tx.payment === "Yoco"
             ? "badge-yoco"
-            : s.payment === "Uberzol"
+            : tx.payment === "Uberzol"
               ? "badge-uberzol"
               : "badge-eft";
+
       return `
       <tr>
-        <td>${new Date(s.date).toLocaleString()}</td>
-        <td>${s.productName}</td>
-        <td>${s.quantity}</td>
-        <td><span class="${badgeClass}">${s.payment}</span></td>
-        <td>${currency(s.total)}</td>
+        <td>
+          ${new Date(tx.date).toLocaleString()}
+          ${tx.note ? `<br><small class="text-muted">${tx.note}</small>` : ""}
+        </td>
+        <td>
+          <strong>${tx.items.length} items</strong>
+          <br>
+          <small class="text-muted">${itemsSummary}</small>
+          ${tx.discount > 0 ? `<br><small class="text-success">💸 Total Discount: ${currency(tx.discount)}</small>` : ""}
+        </td>
+        <td>
+          <span class="badge bg-secondary">${tx.itemCount || tx.items.length}</span>
+          <br>
+          <small class="text-muted">${tx.items.reduce((sum, i) => sum + i.quantity, 0)} units</small>
+        </td>
+        <td><span class="${badgeClass}">${tx.payment}</span></td>
+        <td>
+          <strong>${currency(tx.total)}</strong>
+          ${tx.discount > 0 ? `<br><small class="text-muted"><del>${currency(tx.subtotal)}</del></small>` : ""}
+        </td>
       </tr>
     `;
     })
@@ -1139,70 +1308,110 @@ function renderSalesHistory() {
 }
 
 function renderDashboard() {
-  const revenue = sales.reduce((s, sale) => s + Number(sale.total || 0), 0);
-  const cash = sales
-    .filter((s) => s.payment === "Cash")
-    .reduce((s, sale) => s + Number(sale.total || 0), 0);
-  const yoco = sales
-    .filter((s) => s.payment === "Yoco")
-    .reduce((s, sale) => s + Number(sale.total || 0), 0);
-  const eft = sales
-    .filter((s) => s.payment === "EFT")
-    .reduce((s, sale) => s + Number(sale.total || 0), 0);
-  const uberzol = sales
-    .filter((s) => s.payment === "Uberzol")
-    .reduce((s, sale) => s + Number(sale.total || 0), 0);
+  // Check if transactions exists
+  if (!transactions) transactions = [];
 
-  document.getElementById("dashboardRevenue").textContent = currency(revenue);
-  document.getElementById("dashboardCash").textContent = currency(cash);
-  document.getElementById("dashboardYoco").textContent = currency(yoco);
-  document.getElementById("dashboardEftSales").textContent = currency(eft);
-  document.getElementById("dashboardUberzol").textContent = currency(uberzol);
+  // Calculate totals from transactions
+  const totalRevenue = transactions.reduce(
+    (sum, tx) => sum + (tx.total || 0),
+    0,
+  );
+  const cash = transactions
+    .filter((tx) => tx.payment === "Cash")
+    .reduce((sum, tx) => sum + (tx.total || 0), 0);
+  const yoco = transactions
+    .filter((tx) => tx.payment === "Yoco")
+    .reduce((sum, tx) => sum + (tx.total || 0), 0);
+  const eft = transactions
+    .filter((tx) => tx.payment === "EFT")
+    .reduce((sum, tx) => sum + (tx.total || 0), 0);
+  const uberzol = transactions
+    .filter((tx) => tx.payment === "Uberzol")
+    .reduce((sum, tx) => sum + (tx.total || 0), 0);
 
+  // Get DOM elements and update them
+  const revenueEl = document.getElementById("dashboardRevenue");
+  const cashEl = document.getElementById("dashboardCash");
+  const yocoEl = document.getElementById("dashboardYoco");
+  const eftEl = document.getElementById("dashboardEftSales");
+  const uberzolEl = document.getElementById("dashboardUberzol");
+
+  if (revenueEl) revenueEl.textContent = currency(totalRevenue);
+  if (cashEl) cashEl.textContent = currency(cash);
+  if (yocoEl) yocoEl.textContent = currency(yoco);
+  if (eftEl) eftEl.textContent = currency(eft);
+  if (uberzolEl) uberzolEl.textContent = currency(uberzol);
+
+  // Payment breakdown
   const breakdown = [
-    { label: "Cash", value: cash, total: revenue },
-    { label: "Yoco", value: yoco, total: revenue },
-    { label: "EFT", value: eft, total: revenue },
-    { label: "Uberzol", value: uberzol, total: revenue },
+    { label: "Cash", value: cash, total: totalRevenue },
+    { label: "Yoco", value: yoco, total: totalRevenue },
+    { label: "EFT", value: eft, total: totalRevenue },
+    { label: "Uberzol", value: uberzol, total: totalRevenue },
   ];
 
   const breakdownContainer = document.getElementById("paymentBreakdown");
   if (breakdownContainer) {
     breakdownContainer.innerHTML = breakdown
       .map((entry) => {
-        const pct = revenue ? ((entry.value / revenue) * 100).toFixed(1) : 0;
+        const pct =
+          totalRevenue > 0
+            ? ((entry.value / totalRevenue) * 100).toFixed(1)
+            : 0;
         return `
         <div class="payment-bar">
-          <div class="d-flex justify-content-between"><strong>${entry.label}</strong><span>${currency(entry.value)} · ${pct}%</span></div>
-          <div class="bar"><span style="width:${pct}%"></span></div>
+          <div class="d-flex justify-content-between">
+            <strong>${entry.label}</strong>
+            <span>${currency(entry.value)} · ${pct}%</span>
+          </div>
+          <div class="bar">
+            <span style="width:${pct}%"></span>
+          </div>
         </div>
       `;
       })
       .join("");
   }
 
-  const salesByProduct = products
-    .map((p) => ({
-      name: p.name,
-      units: sales
-        .filter((s) => String(s.productId) === String(p.id))
-        .reduce((sum, s) => sum + s.quantity, 0),
-    }))
+  // Top products (from transaction items)
+  const productSales = {};
+  transactions.forEach((tx) => {
+    if (tx.items && tx.items.length > 0) {
+      tx.items.forEach((item) => {
+        if (!productSales[item.productId]) {
+          productSales[item.productId] = {
+            name: item.productName,
+            units: 0,
+            revenue: 0,
+          };
+        }
+        productSales[item.productId].units += item.quantity || 0;
+        productSales[item.productId].revenue += item.lineTotal || 0;
+      });
+    }
+  });
+
+  const topProducts = Object.values(productSales)
     .sort((a, b) => b.units - a.units)
     .slice(0, 5);
 
   const topProductsList = document.getElementById("topProductsList");
   if (topProductsList) {
-    topProductsList.innerHTML = salesByProduct.some((i) => i.units > 0)
-      ? salesByProduct
-          .map(
-            (i) =>
-              `<div class="d-flex justify-content-between py-2 border-bottom"><span>${i.name}</span><strong>${i.units} contributed</strong></div>`,
-          )
-          .join("")
-      : '<div class="empty-state">No contributions recorded yet.</div>';
+    topProductsList.innerHTML =
+      topProducts.length > 0
+        ? topProducts
+            .map(
+              (p) =>
+                `<div class="d-flex justify-content-between py-2 border-bottom">
+                <span>${p.name}</span>
+                <strong>${p.units} units · ${currency(p.revenue)}</strong>
+              </div>`,
+            )
+            .join("")
+        : '<div class="empty-state">No contributions recorded yet.</div>';
   }
 
+  // Stock alerts
   const low = products
     .filter((p) => p.stock < 10)
     .sort((a, b) => a.stock - b.stock);
@@ -1213,17 +1422,23 @@ function renderDashboard() {
       ? low
           .map(
             (p) =>
-              `<div class="d-flex justify-content-between py-2 border-bottom"><span>${p.name}</span><strong>${p.stock} left</strong></div>`,
+              `<div class="d-flex justify-content-between py-2 border-bottom">
+                <span>${p.name}</span>
+                <strong>${p.stock} left</strong>
+              </div>`,
           )
           .join("")
       : '<div class="empty-state">All items are comfortably stocked.</div>';
   }
 
+  // Render daily revenue chart
   renderDailyRevenueChart();
 }
 
 function renderDailyRevenueChart() {
   const container = document.getElementById("dailyRevenueChart");
+  if (!container) return;
+
   const days = 7;
   const labels = [];
   const totals = [];
@@ -1232,9 +1447,12 @@ function renderDailyRevenueChart() {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10);
-    const total = sales
-      .filter((s) => new Date(s.date).toISOString().slice(0, 10) === key)
-      .reduce((sum, s) => sum + Number(s.total || 0), 0);
+
+    // Sum totals from transactions on this day
+    const total = transactions
+      .filter((tx) => tx.date && tx.date.startsWith(key))
+      .reduce((sum, tx) => sum + (tx.total || 0), 0);
+
     labels.push(
       d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
     );
@@ -1291,6 +1509,9 @@ function addToCart(productId, qty = 1) {
   renderCart();
 }
 
+// ============================================
+// NEW CHECKOUT FUNCTION (REPLACE THE OLD ONE)
+// ============================================
 async function checkout() {
   if (!cart.length) {
     alert("Add at least one item to the cart first.");
@@ -1298,9 +1519,14 @@ async function checkout() {
   }
 
   const payment = document.getElementById("paymentMethod").value;
-  const newSales = [];
 
-  // Check if Uberzol is selected and get the manual subtotal
+  // Calculate basket totals
+  let subtotal = 0;
+  let total = 0;
+  let discount = 0;
+  const items = [];
+
+  // Check if Uberzol is selected
   let uberzolTotal = null;
   if (payment === "Uberzol") {
     const input = document.getElementById("uberzolSubtotalInput");
@@ -1315,65 +1541,190 @@ async function checkout() {
     }
   }
 
-  // Calculate proportions for Uberzol distribution
+  // Calculate normal subtotal for distribution (using custom prices if set)
   let calculatedSubtotal = 0;
-  if (payment === "Uberzol" && uberzolTotal !== null) {
-    cart.forEach((item) => {
-      const product = getProductById(item.productId);
-      if (product) {
-        calculatedSubtotal += calculatePrice(product, item.quantity);
-      }
-    });
-  }
+  cart.forEach((item) => {
+    const product = getProductById(item.productId);
+    if (product) {
+      // Use custom price if set, otherwise use calculated price
+      const price =
+        item.customPrice !== undefined
+          ? item.customPrice
+          : calculatePrice(product, item.quantity);
+      calculatedSubtotal += price;
+    }
+  });
 
+  // Process each cart item
   for (const item of cart) {
     const product = getProductById(item.productId);
     if (!product) continue;
+
+    // Check stock
     if (product.stock < item.quantity) {
       alert(`Only ${product.stock} unit(s) of ${product.name} remain.`);
       return;
     }
-    product.stock -= item.quantity;
 
-    let total;
+    // Calculate item price - USE CUSTOM PRICE IF SET
+    let itemTotal;
+    let isBundle = false;
+    let bundleDiscount = 0;
+
+    // Get the effective price for this item
+    const effectivePrice =
+      item.customPrice !== undefined
+        ? item.customPrice
+        : calculatePrice(product, item.quantity);
+
+    // Calculate normal price (without bundles) for subtotal
+    const normalPrice = product.price * item.quantity;
+
     if (payment === "Uberzol" && uberzolTotal !== null) {
-      const itemTotal = calculatePrice(product, item.quantity);
+      // Uberzol: distribute proportionally based on effective prices
       const proportion =
         calculatedSubtotal > 0
-          ? itemTotal / calculatedSubtotal
+          ? effectivePrice / calculatedSubtotal
           : 1 / cart.length;
-      total = uberzolTotal * proportion;
+      itemTotal = uberzolTotal * proportion;
     } else {
-      total =
-        item.customPrice !== undefined
-          ? item.customPrice
-          : calculatePrice(product, item.quantity);
+      // Check if bundle pricing applies (only if no custom price)
+      if (item.customPrice === undefined) {
+        const bundlePrice = calculatePrice(product, item.quantity);
+        if (bundlePrice < normalPrice) {
+          isBundle = true;
+          bundleDiscount = normalPrice - bundlePrice;
+          itemTotal = bundlePrice;
+        } else {
+          itemTotal = normalPrice;
+        }
+      } else {
+        // Use custom price
+        itemTotal = effectivePrice;
+      }
     }
 
-    // DON'T include id - let Supabase generate it
-    const saleRecord = {
+    // Reduce stock
+    product.stock -= item.quantity;
+
+    // Add to items array
+    items.push({
       productId: String(product.id),
       productName: product.name,
       quantity: item.quantity,
-      price: product.price,
-      payment: payment,
-      total: total,
-      date: new Date().toISOString(),
-    };
+      unitPrice: product.price,
+      lineTotal: itemTotal,
+      isBundle: isBundle,
+      bundleDiscount: bundleDiscount,
+      customPrice: item.customPrice !== undefined, // Flag to indicate custom price was used
+    });
 
-    if (payment === "Uberzol") {
-      saleRecord.note = `Uberzol total: ${currency(uberzolTotal)}`;
-    }
-
-    newSales.push(saleRecord);
+    subtotal += normalPrice;
+    total += itemTotal;
+    discount += bundleDiscount;
   }
 
-  sales.push(...newSales);
+  // Create transaction
+  const transaction = {
+    payment: payment,
+    subtotal: subtotal,
+    discount: discount,
+    total: total,
+    items: items,
+    date: new Date().toISOString(),
+    note:
+      payment === "Uberzol" ? `Uberzol total: ${currency(uberzolTotal)}` : null,
+  };
+
+  console.log("Transaction:", transaction);
+
+  // Save transaction
+  await database.saveTransaction(transaction);
+
+  // Update products
   await saveProducts();
-  await saveSales();
+
+  // Clear cart and refresh
   cart = [];
   renderAll();
-  setSyncStatus("Contribution recorded!", "success");
+  setSyncStatus("Transaction recorded!", "success");
+
+  // Show transaction summary
+  showTransactionSummary(transaction);
+}
+
+// ----- TRANSACTION SUMMARY -----
+function showTransactionSummary(transaction) {
+  const itemsList = transaction.items
+    .map((item) => {
+      const originalPrice = item.unitPrice * item.quantity;
+      const paidPrice = item.lineTotal;
+      const isPriceEdited = paidPrice !== originalPrice;
+      const priceDiff = originalPrice - paidPrice;
+      const isDiscount = priceDiff > 0;
+      const isMarkup = priceDiff < 0;
+
+      let tags = "";
+      let priceDisplay = "";
+
+      if (item.isBundle) tags += " 🎯 (Bundle)";
+      if (item.customPrice) tags += " ✏️ (Price Edited)";
+
+      if (isPriceEdited) {
+        if (isDiscount) {
+          priceDisplay = `~~${currency(originalPrice)}~~ → ${currency(paidPrice)} (Saved ${currency(Math.abs(priceDiff))})`;
+        } else if (isMarkup) {
+          priceDisplay = `~~${currency(originalPrice)}~~ → ${currency(paidPrice)} (+${currency(Math.abs(priceDiff))})`;
+        }
+      } else {
+        priceDisplay = `${currency(paidPrice)}`;
+      }
+
+      return `${item.quantity}x ${item.productName}${tags} → ${priceDisplay}`;
+    })
+    .join("\n");
+
+  // Calculate total discount percentage
+  const discountPercentage =
+    transaction.subtotal > 0
+      ? ((transaction.discount / transaction.subtotal) * 100).toFixed(1)
+      : 0;
+
+  // Count how many items were price edited
+  const priceEditedItems = transaction.items.filter((item) => {
+    const originalPrice = item.unitPrice * item.quantity;
+    return item.lineTotal !== originalPrice;
+  }).length;
+
+  const summary = `
+📋 Transaction Summary
+${"=".repeat(50)}
+Payment: ${transaction.payment}
+Items: ${transaction.items.length} (${priceEditedItems} price edited)
+${"-".repeat(50)}
+${itemsList}
+${"-".repeat(50)}
+Subtotal: ${currency(transaction.subtotal)}
+Discount: ${currency(transaction.discount)} (${discountPercentage}% off)
+Total: ${currency(transaction.total)}
+${"=".repeat(50)}
+`;
+
+  console.log(summary);
+
+  // Show alert with discount info
+  let discountMessage = "";
+  if (transaction.discount > 0) {
+    discountMessage = `\n💸 Discount: ${currency(transaction.discount)} (${discountPercentage}% off)`;
+  }
+
+  alert(
+    `✅ Transaction Complete!\n\n` +
+      `Payment: ${transaction.payment}\n` +
+      `Items: ${transaction.items.length} (${priceEditedItems} price edited)${discountMessage}\n` +
+      `Total: ${currency(transaction.total)}\n` +
+      `\nView details in console.`,
+  );
 }
 
 // ----- UBERZOL SUBTOTAL EDITING -----
@@ -1781,49 +2132,138 @@ async function confirmClearDay() {
   const today = new Date().toISOString().slice(0, 10);
 
   try {
-    // Filter sales for today
-    const todaySales = sales.filter((s) => s.date?.startsWith(today));
+    // Filter transactions for today
+    const todayTransactions = transactions.filter((tx) =>
+      tx.date?.startsWith(today),
+    );
 
-    if (todaySales.length === 0) {
+    if (todayTransactions.length === 0) {
       showToast("No sales found", "No sales records for today to clear.");
       hideClearDayModal();
       return;
     }
 
-    console.log(`Clearing ${todaySales.length} sales for ${today}...`);
+    console.log(
+      `Clearing ${todayTransactions.length} transactions for ${today}...`,
+    );
 
-    // Delete each sale from the database
-    for (const sale of todaySales) {
-      await database.deleteSale(sale.id);
+    // Show processing message
+    showToast(
+      "Processing...",
+      `Deleting ${todayTransactions.length} transactions...`,
+      "info",
+    );
+
+    // Get the transaction IDs to delete
+    const transactionIds = todayTransactions.map((tx) => tx.id);
+
+    // Delete from transaction_items first (due to foreign key constraint)
+    // Then delete from transactions
+    let deletedCount = 0;
+    let errorCount = 0;
+
+    for (const txId of transactionIds) {
+      try {
+        // First delete all items for this transaction
+        const { error: itemsError } = await database.client
+          .from("transaction_items")
+          .delete()
+          .eq("transaction_id", txId);
+
+        if (itemsError) {
+          console.error(
+            `Error deleting items for transaction ${txId}:`,
+            itemsError,
+          );
+          errorCount++;
+          continue;
+        }
+
+        // Then delete the transaction itself
+        const { error: txError } = await database.client
+          .from("transactions")
+          .delete()
+          .eq("id", txId);
+
+        if (txError) {
+          console.error(`Error deleting transaction ${txId}:`, txError);
+          errorCount++;
+          continue;
+        }
+
+        deletedCount++;
+
+        // Update progress every 10 transactions
+        if (deletedCount % 10 === 0) {
+          showToast(
+            "Processing...",
+            `Deleted ${deletedCount}/${todayTransactions.length} transactions...`,
+            "info",
+          );
+        }
+      } catch (err) {
+        console.error(`Failed to delete transaction ${txId}:`, err);
+        errorCount++;
+      }
     }
 
-    // Remove from local sales array
-    sales = sales.filter((s) => !s.date?.startsWith(today));
+    // Remove from local transactions array
+    transactions = transactions.filter((tx) => !tx.date?.startsWith(today));
 
-    // Save the updated sales
-    await saveSales();
+    // Also update sales array for backward compatibility
+    sales = [];
+    transactions.forEach((tx) => {
+      tx.items.forEach((item) => {
+        sales.push({
+          id: tx.id,
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          price: item.unitPrice,
+          payment: tx.payment,
+          total: item.lineTotal,
+          date: tx.date,
+          note: tx.note,
+          isBundle: item.isBundle,
+          bundleDiscount: item.bundleDiscount,
+        });
+      });
+    });
 
     // Update UI
     renderAll();
 
     // Show success message
-    showToast(
-      "Day Cleared! 🧹",
-      `Successfully cleared ${todaySales.length} sales records for ${new Date().toLocaleDateString(
-        undefined,
-        {
-          weekday: "long",
-          month: "short",
-          day: "numeric",
-        },
-      )}`,
-    );
+    if (errorCount === 0) {
+      showToast(
+        "Day Cleared! 🧹",
+        `Successfully cleared ${deletedCount} transactions for ${new Date().toLocaleDateString(
+          undefined,
+          {
+            weekday: "long",
+            month: "short",
+            day: "numeric",
+          },
+        )}`,
+        "success",
+      );
+    } else {
+      showToast(
+        "Partial Clear ⚠️",
+        `Cleared ${deletedCount} transactions, but ${errorCount} failed to delete. Check console for details.`,
+        "warning",
+      );
+    }
 
     hideClearDayModal();
-    setSyncStatus(`Cleared ${todaySales.length} sales for today`, "success");
+    setSyncStatus(`Cleared ${deletedCount} transactions for today`, "success");
   } catch (error) {
     console.error("Error clearing day:", error);
-    showToast("Error", "Failed to clear sales. Please try again.", "error");
+    showToast(
+      "Error",
+      "Failed to clear transactions. Please try again.",
+      "error",
+    );
   }
 }
 
@@ -1854,11 +2294,22 @@ function showToast(title, message, type = "success") {
 
   toast.className = "toast-notification";
 
+  // Set icon and color based on type
   if (type === "error") {
     toast.classList.add("error");
     icon.className = "fas fa-exclamation-circle";
     icon.style.color = "#e17055";
     toast.style.borderLeftColor = "#e17055";
+  } else if (type === "warning") {
+    toast.classList.add("warning");
+    icon.className = "fas fa-exclamation-triangle";
+    icon.style.color = "#fdcb6e";
+    toast.style.borderLeftColor = "#fdcb6e";
+  } else if (type === "info") {
+    toast.classList.add("info");
+    icon.className = "fas fa-spinner fa-pulse";
+    icon.style.color = "#74b9ff";
+    toast.style.borderLeftColor = "#74b9ff";
   } else {
     toast.classList.add("success");
     icon.className = "fas fa-check-circle";
@@ -1872,11 +2323,12 @@ function showToast(title, message, type = "success") {
   // Show toast
   toast.classList.add("show");
 
-  // Auto hide after 5 seconds
+  // Auto hide after 5 seconds (or longer for info)
+  const duration = type === "info" ? 10000 : 5000;
   clearTimeout(toast._timeout);
   toast._timeout = setTimeout(() => {
     toast.classList.remove("show");
-  }, 5000);
+  }, duration);
 
   // Click to dismiss
   toast.onclick = function () {

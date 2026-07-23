@@ -779,6 +779,26 @@ body {
   color: var(--text-secondary);
 }
 
+/* Warning toast style */
+.toast-notification.warning {
+  border-left: 4px solid #fdcb6e;
+}
+
+.toast-notification.warning .toast-icon i {
+  color: #fdcb6e !important;
+}
+
+.logo-link {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+
+.logo-image {
+  height: 50px;
+  width: auto;
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;
