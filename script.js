@@ -870,6 +870,8 @@ function calculatePrice(product, quantity) {
   if (!product || quantity <= 0) return 0;
   const unitPrice = Number(product.price) || 0;
   let best = unitPrice * quantity;
+
+  // Check product-specific bundles (existing)
   const rules = product.bundles || [];
   rules.forEach((rule) => {
     if (!rule || rule.qty <= 0) return;
@@ -878,6 +880,32 @@ function calculatePrice(product, quantity) {
     const total = count * Number(rule.price) + rem * unitPrice;
     if (total < best) best = total;
   });
+
+  // NEW: Category-based bundle pricing
+  // Any 3 Greenhouse Pre-rolls for R150
+  if (product.category === "Greenhouse" && product.type === "Pre-roll") {
+    // Check if we can apply the bundle (only if quantity >= 3)
+    if (quantity >= 3) {
+      const bundleCount = Math.floor(quantity / 3);
+      const rem = quantity % 3;
+      // Each bundle of 3 costs R150
+      const total = bundleCount * 150 + rem * unitPrice;
+      if (total < best) best = total;
+    }
+  }
+
+  // Any 3 Indoor Pre-rolls for R300
+  if (product.category === "Indoor" && product.type === "Pre-roll") {
+    // Check if we can apply the bundle (only if quantity >= 3)
+    if (quantity >= 3) {
+      const bundleCount = Math.floor(quantity / 3);
+      const rem = quantity % 3;
+      // Each bundle of 3 costs R300
+      const total = bundleCount * 300 + rem * unitPrice;
+      if (total < best) best = total;
+    }
+  }
+
   return best;
 }
 
@@ -1206,7 +1234,7 @@ function renderSalesHistory() {
   // Check if transactions exists and has data
   if (!transactions || transactions.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="5"><div class="empty-state">No transactions recorded yet.</div></td></tr>';
+      '<tr><td colspan="6"><div class="empty-state">No transactions recorded yet.</div></td></tr>';
     return;
   }
 
@@ -1220,7 +1248,7 @@ function renderSalesHistory() {
 
   if (!filtered.length) {
     tbody.innerHTML =
-      '<tr><td colspan="5"><div class="empty-state">No transactions match the filters.</div></td></tr>';
+      '<tr><td colspan="6"><div class="empty-state">No transactions match the filters.</div></td></tr>';
     return;
   }
 
@@ -1241,16 +1269,13 @@ function renderSalesHistory() {
           let priceDisplay = "";
 
           if (isPriceEdited) {
-            // Show crossed out original price with new price
             if (isDiscount) {
-              // Discount - show original crossed out, new price in green
               priceDisplay = `
               <span class="price-strikethrough">${currency(originalPrice)}</span>
               <span class="text-success fw-bold">${currency(paidPrice)}</span>
               <span class="text-success small">(-${currency(Math.abs(priceDiff))})</span>
             `;
             } else if (isMarkup) {
-              // Markup - show original crossed out, new price in red/orange
               priceDisplay = `
               <span class="price-strikethrough">${currency(originalPrice)}</span>
               <span class="text-warning fw-bold">${currency(paidPrice)}</span>
@@ -1258,12 +1283,31 @@ function renderSalesHistory() {
             `;
             }
           } else {
-            // No price change - show normal price
             priceDisplay = `<span>${currency(paidPrice)}</span>`;
           }
 
           let tags = "";
-          if (item.isBundle) tags += " 🎯";
+          if (item.isBundle) {
+            // Check if it's a category bundle
+            const product = getProductById(item.productId);
+            if (product) {
+              if (
+                product.category === "Greenhouse" &&
+                product.type === "Pre-roll"
+              ) {
+                tags += " 🌿 (3-for-150)";
+              } else if (
+                product.category === "Indoor" &&
+                product.type === "Pre-roll"
+              ) {
+                tags += " 🏠 (3-for-300)";
+              } else {
+                tags += " 🎯";
+              }
+            } else {
+              tags += " 🎯";
+            }
+          }
           if (item.customPrice) tags += " ✏️";
 
           return `${item.quantity}x ${item.productName}${tags} → ${priceDisplay}`;
@@ -1301,10 +1345,38 @@ function renderSalesHistory() {
           <strong>${currency(tx.total)}</strong>
           ${tx.discount > 0 ? `<br><small class="text-muted"><del>${currency(tx.subtotal)}</del></small>` : ""}
         </td>
+        <td>
+          <button class="btn btn-sm edit-transaction-btn" 
+                  data-transaction-id="${tx.id}" 
+                  title="Edit this transaction">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button class="btn btn-sm delete-transaction-btn" 
+                  data-transaction-id="${tx.id}" 
+                  title="Delete this transaction">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
       </tr>
     `;
     })
     .join("");
+
+  // Add event listeners for edit buttons
+  document.querySelectorAll(".edit-transaction-btn").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const transactionId = this.dataset.transactionId;
+      editTransaction(transactionId);
+    });
+  });
+
+  // Add event listeners for delete buttons
+  document.querySelectorAll(".delete-transaction-btn").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const transactionId = this.dataset.transactionId;
+      deleteTransaction(transactionId);
+    });
+  });
 }
 
 function renderDashboard() {
@@ -1566,41 +1638,41 @@ async function checkout() {
       return;
     }
 
-    // Calculate item price - USE CUSTOM PRICE IF SET
+    // Calculate item price
     let itemTotal;
     let isBundle = false;
     let bundleDiscount = 0;
-
-    // Get the effective price for this item
-    const effectivePrice =
-      item.customPrice !== undefined
-        ? item.customPrice
-        : calculatePrice(product, item.quantity);
-
-    // Calculate normal price (without bundles) for subtotal
     const normalPrice = product.price * item.quantity;
 
     if (payment === "Uberzol" && uberzolTotal !== null) {
-      // Uberzol: distribute proportionally based on effective prices
       const proportion =
         calculatedSubtotal > 0
-          ? effectivePrice / calculatedSubtotal
+          ? (product.price * item.quantity) / calculatedSubtotal
           : 1 / cart.length;
       itemTotal = uberzolTotal * proportion;
     } else {
-      // Check if bundle pricing applies (only if no custom price)
-      if (item.customPrice === undefined) {
-        const bundlePrice = calculatePrice(product, item.quantity);
-        if (bundlePrice < normalPrice) {
-          isBundle = true;
-          bundleDiscount = normalPrice - bundlePrice;
-          itemTotal = bundlePrice;
-        } else {
-          itemTotal = normalPrice;
+      // Check if bundle pricing applies
+      const bundlePrice = calculatePrice(product, item.quantity);
+      if (bundlePrice < normalPrice) {
+        isBundle = true;
+        bundleDiscount = normalPrice - bundlePrice;
+        itemTotal = bundlePrice;
+
+        // Log which type of bundle was applied
+        if (product.category === "Greenhouse" && product.type === "Pre-roll") {
+          console.log(
+            `🎯 Greenhouse Bundle: ${item.quantity}x ${product.name} = ${currency(itemTotal)} (saved ${currency(bundleDiscount)})`,
+          );
+        } else if (
+          product.category === "Indoor" &&
+          product.type === "Pre-roll"
+        ) {
+          console.log(
+            `🎯 Indoor Bundle: ${item.quantity}x ${product.name} = ${currency(itemTotal)} (saved ${currency(bundleDiscount)})`,
+          );
         }
       } else {
-        // Use custom price
-        itemTotal = effectivePrice;
+        itemTotal = normalPrice;
       }
     }
 
@@ -2046,6 +2118,328 @@ function handleLogin() {
   }
 }
 
+// ----- EDIT TRANSACTION -----
+async function editTransaction(transactionId) {
+  // Find the transaction
+  const transaction = transactions.find((tx) => tx.id === transactionId);
+  if (!transaction) {
+    showToast("Error", "Transaction not found.", "error");
+    return;
+  }
+
+  const modal = document.getElementById("editTransactionModal");
+  const content = document.getElementById("editTransactionContent");
+
+  // Build the edit form
+  let itemsHtml = transaction.items
+    .map((item, index) => {
+      const originalPrice = item.unitPrice * item.quantity;
+      return `
+      <div class="edit-item-row mb-2 p-2 border rounded" style="background: var(--bg-secondary);">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="fw-bold">${item.productName}</div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small">Qty:</span>
+            <input type="number" class="form-control form-control-sm edit-qty" 
+                   style="width: 60px;" value="${item.quantity}" min="1" data-index="${index}">
+            <span class="text-muted small">Price:</span>
+            <input type="number" class="form-control form-control-sm edit-price" 
+                   style="width: 100px;" value="${item.lineTotal}" step="0.01" min="0" data-index="${index}">
+            <button class="btn btn-outline-danger btn-sm remove-edit-item" data-index="${index}">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+        <div class="small text-muted mt-1">
+          Original: ${currency(originalPrice)} | 
+          Unit: ${currency(item.unitPrice)} × ${item.quantity}
+        </div>
+      </div>
+    `;
+    })
+    .join("");
+
+  content.innerHTML = `
+    <form id="editTransactionForm">
+      <div class="mb-3">
+        <label class="form-label">Payment Method</label>
+        <select id="editPaymentMethod" class="form-select">
+          <option value="Cash" ${transaction.payment === "Cash" ? "selected" : ""}>Cash</option>
+          <option value="Yoco" ${transaction.payment === "Yoco" ? "selected" : ""}>Yoco</option>
+          <option value="EFT" ${transaction.payment === "EFT" ? "selected" : ""}>EFT</option>
+          <option value="Uberzol" ${transaction.payment === "Uberzol" ? "selected" : ""}>Uberzol</option>
+        </select>
+      </div>
+      
+      <div class="mb-3">
+        <label class="form-label">Items</label>
+        <div id="editItemsContainer">
+          ${itemsHtml}
+        </div>
+        <button type="button" id="addEditItemBtn" class="btn btn-outline-secondary btn-sm mt-2">
+          <i class="fas fa-plus"></i> Add Item
+        </button>
+      </div>
+      
+      <div class="mb-3">
+        <label class="form-label">Note</label>
+        <input type="text" id="editNote" class="form-control" value="${transaction.note || ""}" placeholder="Optional note...">
+      </div>
+      
+      <div class="d-flex justify-content-between align-items-center border-top pt-3">
+        <div>
+          <strong>Subtotal: </strong><span id="editSubtotal">${currency(transaction.subtotal)}</span>
+          <br>
+          <strong>Discount: </strong><span id="editDiscount">${currency(transaction.discount)}</span>
+          <br>
+          <strong>Total: </strong><span id="editTotal" class="text-success fw-bold">${currency(transaction.total)}</span>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="button" id="cancelEditBtn" class="btn btn-outline-secondary">Cancel</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fas fa-save me-2"></i>Save Changes
+          </button>
+        </div>
+      </div>
+    </form>
+  `;
+
+  // Show modal
+  modal.style.display = "flex";
+
+  // Add event listeners for the edit form
+  setupEditFormListeners(transactionId);
+}
+
+function setupEditFormListeners(transactionId) {
+  const form = document.getElementById("editTransactionForm");
+  const cancelBtn = document.getElementById("cancelEditBtn");
+  const addItemBtn = document.getElementById("addEditItemBtn");
+
+  // Cancel button
+  cancelBtn.addEventListener("click", () => {
+    document.getElementById("editTransactionModal").style.display = "none";
+  });
+
+  // Close on overlay click
+  const modal = document.getElementById("editTransactionModal");
+  modal.addEventListener("click", function (e) {
+    if (e.target === this) {
+      this.style.display = "none";
+    }
+  });
+
+  // Add item button
+  addItemBtn.addEventListener("click", function () {
+    addEditItemRow();
+  });
+
+  // Remove item buttons
+  document.querySelectorAll(".remove-edit-item").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const index = parseInt(this.dataset.index);
+      const rows = document.querySelectorAll(".edit-item-row");
+      if (rows.length > 1) {
+        this.closest(".edit-item-row").remove();
+        updateEditTotals();
+      } else {
+        showToast(
+          "Warning",
+          "Transaction must have at least one item.",
+          "warning",
+        );
+      }
+    });
+  });
+
+  // Quantity and price input listeners
+  document.querySelectorAll(".edit-qty, .edit-price").forEach((input) => {
+    input.addEventListener("input", updateEditTotals);
+  });
+
+  // Form submit
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    saveEditedTransaction(transactionId);
+  });
+}
+
+function addEditItemRow() {
+  const container = document.getElementById("editItemsContainer");
+  const index = document.querySelectorAll(".edit-item-row").length;
+
+  const row = document.createElement("div");
+  row.className = "edit-item-row mb-2 p-2 border rounded";
+  row.style.background = "var(--bg-secondary)";
+  row.innerHTML = `
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <input type="text" class="form-control form-control-sm edit-product-name" 
+               placeholder="Product name" style="width: 150px;" value="New Item">
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="text-muted small">Qty:</span>
+        <input type="number" class="form-control form-control-sm edit-qty" 
+               style="width: 60px;" value="1" min="1" data-index="${index}">
+        <span class="text-muted small">Price:</span>
+        <input type="number" class="form-control form-control-sm edit-price" 
+               style="width: 100px;" value="0.00" step="0.01" min="0" data-index="${index}">
+        <button class="btn btn-outline-danger btn-sm remove-edit-item" data-index="${index}">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+    <div class="small text-muted mt-1">
+      New item added
+    </div>
+  `;
+
+  container.appendChild(row);
+
+  // Add event listeners
+  row.querySelectorAll(".edit-qty, .edit-price").forEach((input) => {
+    input.addEventListener("input", updateEditTotals);
+  });
+
+  row.querySelector(".remove-edit-item").addEventListener("click", function () {
+    const rows = document.querySelectorAll(".edit-item-row");
+    if (rows.length > 1) {
+      this.closest(".edit-item-row").remove();
+      updateEditTotals();
+    } else {
+      showToast(
+        "Warning",
+        "Transaction must have at least one item.",
+        "warning",
+      );
+    }
+  });
+
+  updateEditTotals();
+}
+
+function updateEditTotals() {
+  let subtotal = 0;
+  const rows = document.querySelectorAll(".edit-item-row");
+
+  rows.forEach((row) => {
+    const qty = parseInt(row.querySelector(".edit-qty").value) || 0;
+    const price = parseFloat(row.querySelector(".edit-price").value) || 0;
+    subtotal += qty * price;
+  });
+
+  // Calculate discount (if any items were discounted)
+  const discount = 0; // You can add custom discount logic here
+
+  const total = subtotal - discount;
+
+  document.getElementById("editSubtotal").textContent = currency(subtotal);
+  document.getElementById("editDiscount").textContent = currency(discount);
+  document.getElementById("editTotal").textContent = currency(total);
+}
+
+async function saveEditedTransaction(transactionId) {
+  try {
+    // Get the original transaction
+    const originalTx = transactions.find((tx) => tx.id === transactionId);
+    if (!originalTx) {
+      showToast("Error", "Transaction not found.", "error");
+      return;
+    }
+
+    // Get edited data
+    const payment = document.getElementById("editPaymentMethod").value;
+    const note = document.getElementById("editNote").value;
+    const rows = document.querySelectorAll(".edit-item-row");
+
+    const items = [];
+    let subtotal = 0;
+
+    rows.forEach((row) => {
+      const productName =
+        row.querySelector(".edit-product-name")?.value || "Unknown Item";
+      const qty = parseInt(row.querySelector(".edit-qty").value) || 0;
+      const lineTotal = parseFloat(row.querySelector(".edit-price").value) || 0;
+      const unitPrice = qty > 0 ? lineTotal / qty : 0;
+
+      items.push({
+        productId: originalTx.items[0]?.productId || "unknown",
+        productName: productName,
+        quantity: qty,
+        unitPrice: unitPrice,
+        lineTotal: lineTotal,
+        isBundle: false,
+        bundleDiscount: 0,
+        customPrice: true,
+      });
+
+      subtotal += lineTotal;
+    });
+
+    // Delete old transaction and items
+    await database.client
+      .from("transaction_items")
+      .delete()
+      .eq("transaction_id", transactionId);
+
+    await database.client.from("transactions").delete().eq("id", transactionId);
+
+    // Create new transaction with updated data
+    const newTransaction = {
+      payment: payment,
+      subtotal: subtotal,
+      discount: 0,
+      total: subtotal,
+      items: items,
+      date: originalTx.date,
+      note: note || null,
+    };
+
+    await database.saveTransaction(newTransaction);
+
+    // Reload data
+    await loadData();
+    renderAll();
+
+    document.getElementById("editTransactionModal").style.display = "none";
+    showToast("Success", "Transaction updated successfully!", "success");
+  } catch (error) {
+    console.error("Error saving edited transaction:", error);
+    showToast("Error", "Failed to update transaction.", "error");
+  }
+}
+
+// ----- DELETE TRANSACTION -----
+async function deleteTransaction(transactionId) {
+  if (
+    !confirm(
+      "Are you sure you want to delete this transaction? This cannot be undone.",
+    )
+  ) {
+    return;
+  }
+
+  try {
+    // Delete items first
+    await database.client
+      .from("transaction_items")
+      .delete()
+      .eq("transaction_id", transactionId);
+
+    // Delete transaction
+    await database.client.from("transactions").delete().eq("id", transactionId);
+
+    // Reload data
+    await loadData();
+    renderAll();
+
+    showToast("Success", "Transaction deleted successfully!", "success");
+  } catch (error) {
+    console.error("Error deleting transaction:", error);
+    showToast("Error", "Failed to delete transaction.", "error");
+  }
+}
+
 async function initializeApp() {
   setSyncStatus("Initializing database...", "info");
 
@@ -2060,7 +2454,7 @@ async function initializeApp() {
 
   await loadData();
   renderAll();
-  setSyncStatus("Ready - connected to Supabase", "success");
+  setSyncStatus("Connected", "success");
 }
 
 // ----- CLEAR DAY FUNCTION -----

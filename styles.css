@@ -444,15 +444,27 @@ body {
   font-weight: 600;
 }
 
+/* ============================================
+   DASHBOARD STYLES (UPDATED)
+   ============================================ */
+
 /* Dashboard Cards */
 .dash-card {
   border-radius: 22px;
   color: white;
-  min-height: 140px;
-  padding: 1.1rem 1.15rem;
+  min-height: 120px;
+  padding: 1rem 1.15rem;
   position: relative;
   overflow: hidden;
   box-shadow: 0 18px 35px -20px rgba(15, 23, 42, 0.45);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.dash-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 40px -20px rgba(15, 23, 42, 0.55);
 }
 
 .dash-card::before {
@@ -468,22 +480,25 @@ body {
 }
 
 .dash-card h2 {
-  margin-top: 1rem;
-  font-size: 1.6rem;
+  margin-top: 0.4rem;
+  font-size: 1.4rem;
   position: relative;
   z-index: 1;
+  line-height: 1.2;
 }
 
 .dash-card .dash-label {
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   opacity: 0.9;
   position: relative;
   z-index: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .dash-card i {
-  font-size: 1.5rem;
-  opacity: 0.6;
+  font-size: 1.3rem;
+  opacity: 0.5;
   position: relative;
   z-index: 1;
 }
@@ -557,13 +572,18 @@ body {
   text-align: center;
 }
 
+/* Daily Chart - Updated */
+.daily-chart {
+  min-height: 200px;
+}
+
 .daily-chart-bars {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.9rem;
+  gap: 0.75rem;
   align-items: end;
-  min-height: 240px;
-  padding: 0.35rem 0.15rem 0.1rem;
+  min-height: 180px;
+  padding: 0.25rem 0.1rem;
 }
 
 .daily-chart-bar-group {
@@ -571,53 +591,49 @@ body {
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.4rem;
   height: 100%;
 }
 
 .daily-chart-bar {
   width: 100%;
-  min-height: 20px;
-  border-radius: 999px 999px 10px 10px;
-  background: linear-gradient(180deg, #14b8a6 0%, #2563eb 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 12px 24px -12px rgba(37, 99, 235, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  min-height: 12px;
+  border-radius: 999px 999px 6px 6px;
+  background: linear-gradient(180deg, #14b8a6, #2563eb);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 0.35rem;
+  padding-top: 0.2rem;
   position: relative;
-  overflow: hidden;
-}
-
-.daily-chart-bar::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.25),
-    transparent 55%
-  );
-  pointer-events: none;
+  transition: height 0.6s ease;
 }
 
 .daily-chart-value {
-  font-size: 0.72rem;
+  font-size: 0.6rem;
   font-weight: 700;
   color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   position: relative;
   z-index: 1;
 }
 
 .daily-chart-label {
-  font-size: 0.74rem;
+  font-size: 0.65rem;
   color: #64748b;
   text-align: center;
   font-weight: 600;
+}
+
+/* Top Products & Stock Alerts Lists */
+#topProductsList > div:last-child,
+#stockAlertsList > div:last-child {
+  border-bottom: none !important;
+}
+
+#topProductsList .empty-state,
+#stockAlertsList .empty-state {
+  padding: 1.5rem;
 }
 
 /* Bundle input styles */
@@ -799,6 +815,26 @@ body {
   width: auto;
 }
 
+/* Price display styles */
+.price-strikethrough {
+  text-decoration: line-through;
+  color: #999;
+  font-size: 0.8rem;
+  margin-right: 0.3rem;
+}
+
+.text-success {
+  color: #00b894 !important;
+}
+
+.text-warning {
+  color: #fdcb6e !important;
+}
+
+.text-danger {
+  color: #e17055 !important;
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;
@@ -840,11 +876,46 @@ body {
   .bundle-input-group .form-control {
     min-width: 80px;
   }
+
+  /* Dashboard responsive */
   .dash-card {
-    min-height: 100px;
+    min-height: 90px;
+    padding: 0.75rem 1rem;
   }
   .dash-card h2 {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
+  }
+  .dash-card .dash-label {
+    font-size: 0.65rem;
+  }
+  .dash-card i {
+    font-size: 1rem;
+  }
+
+  .daily-chart-bars {
+    gap: 0.5rem;
+    min-height: 140px;
+  }
+  .daily-chart-value {
+    font-size: 0.5rem;
+  }
+  .daily-chart-label {
+    font-size: 0.55rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .dash-card {
+    min-height: 75px;
+    padding: 0.6rem 0.8rem;
+  }
+  .dash-card h2 {
+    font-size: 0.95rem;
+    margin-top: 0.2rem;
+  }
+  .daily-chart-bars {
+    gap: 0.3rem;
+    min-height: 120px;
   }
 }
 
