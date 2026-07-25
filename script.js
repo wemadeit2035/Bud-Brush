@@ -911,18 +911,28 @@ function calculatePrice(product, quantity) {
 
 // ----- CART-LEVEL BUNDLE CALCULATION -----
 function applyCartBundles(cartItems) {
-  // Separate items into categories
+  // Separate items into categories - Pre-rolls vs Flowers
   const greenhousePrerolls = [];
+  const greenhouseFlowers = [];
   const indoorPrerolls = [];
+  const indoorFlowers = [];
   const otherItems = [];
-
-  let totalDiscount = 0;
-  const processedItems = [];
 
   // Categorize items
   cartItems.forEach((item) => {
     const product = getProductById(item.productId);
     if (!product) return;
+
+    // If item has a custom price, it goes to other items (no bundle applied)
+    if (item.customPrice !== undefined) {
+      otherItems.push({
+        ...item,
+        product: product,
+        originalTotal: product.price * item.quantity,
+        isCustomPrice: true,
+      });
+      return;
+    }
 
     if (product.category === "Greenhouse" && product.type === "Pre-roll") {
       greenhousePrerolls.push({
@@ -930,8 +940,30 @@ function applyCartBundles(cartItems) {
         product: product,
         originalTotal: product.price * item.quantity,
       });
-    } else if (product.category === "Indoor" && product.type === "Pre-roll") {
+    } else if (product.category === "Greenhouse" && product.type === "Flower") {
+      greenhouseFlowers.push({
+        ...item,
+        product: product,
+        originalTotal: product.price * item.quantity,
+      });
+    } else if (
+      (product.category === "Indoor" ||
+        product.category === "Indoor Exotic" ||
+        product.category === "Indoor Hydro") &&
+      product.type === "Pre-roll"
+    ) {
       indoorPrerolls.push({
+        ...item,
+        product: product,
+        originalTotal: product.price * item.quantity,
+      });
+    } else if (
+      (product.category === "Indoor" ||
+        product.category === "Indoor Exotic" ||
+        product.category === "Indoor Hydro") &&
+      product.type === "Flower"
+    ) {
+      indoorFlowers.push({
         ...item,
         product: product,
         originalTotal: product.price * item.quantity,
@@ -945,103 +977,186 @@ function applyCartBundles(cartItems) {
     }
   });
 
-  // Process Greenhouse Pre-rolls (3 for R150)
-  let greenhouseTotalUnits = greenhousePrerolls.reduce(
-    (sum, item) => sum + item.quantity,
-    0,
-  );
-  let greenhouseBundleCount = Math.floor(greenhouseTotalUnits / 3);
-  let greenhouseRemaining = greenhouseTotalUnits % 3;
+  // Helper function to calculate bundle for a category
+  function calculateBundle(items, bundleQty, bundlePrice) {
+    if (items.length === 0) {
+      return {
+        items: [],
+        totalUnits: 0,
+        bundleCount: 0,
+        remaining: 0,
+        normalTotal: 0,
+        bundledTotal: 0,
+        discount: 0,
+      };
+    }
 
-  // Process Indoor Pre-rolls (3 for R300)
-  let indoorTotalUnits = indoorPrerolls.reduce(
-    (sum, item) => sum + item.quantity,
-    0,
-  );
-  let indoorBundleCount = Math.floor(indoorTotalUnits / 3);
-  let indoorRemaining = indoorTotalUnits % 3;
+    const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
+    const bundleCount = Math.floor(totalUnits / bundleQty);
+    const remaining = totalUnits % bundleQty;
+    const normalTotal = items.reduce(
+      (sum, item) => sum + item.originalTotal,
+      0,
+    );
 
-  // Calculate totals
-  let greenhouseNormalTotal = greenhousePrerolls.reduce(
-    (sum, item) => sum + item.originalTotal,
-    0,
-  );
-  let indoorNormalTotal = indoorPrerolls.reduce(
-    (sum, item) => sum + item.originalTotal,
-    0,
-  );
-  let otherTotal = otherItems.reduce(
-    (sum, item) => sum + item.originalTotal,
-    0,
-  );
+    let bundledTotal = 0;
+    let discount = 0;
 
-  // Calculate bundled prices
-  let greenhouseBundledTotal =
-    greenhouseBundleCount * 150 + greenhouseRemaining * 60; // Average price for remaining
-  let indoorBundledTotal = indoorBundleCount * 300 + indoorRemaining * 90; // Average price for remaining
+    if (bundleCount > 0) {
+      const bundledUnits = bundleCount * bundleQty;
+      const bundledPrice = bundleCount * bundlePrice;
 
-  // Calculate discounts
-  let greenhouseDiscount = greenhouseNormalTotal - greenhouseBundledTotal;
-  let indoorDiscount = indoorNormalTotal - indoorBundledTotal;
+      let remainingUnits = bundledUnits;
+      let bundleOriginalPrice = 0;
 
-  // Distribute discounts proportionally to each item
-  const resultItems = [];
+      for (const item of items) {
+        if (remainingUnits <= 0) break;
+        const unitsToTake = Math.min(item.quantity, remainingUnits);
+        const proportion = unitsToTake / item.quantity;
+        bundleOriginalPrice += item.originalTotal * proportion;
+        remainingUnits -= unitsToTake;
+      }
 
-  // Process Greenhouse items with discount distribution
-  greenhousePrerolls.forEach((item) => {
-    const proportion = item.originalTotal / greenhouseNormalTotal;
-    const itemDiscount = greenhouseDiscount * proportion;
-    const finalPrice = item.originalTotal - itemDiscount;
-    const isBundle = greenhouseBundleCount > 0 && item.quantity >= 1;
+      discount = bundleOriginalPrice - bundledPrice;
+      bundledTotal = bundledPrice + (normalTotal - bundleOriginalPrice);
+    } else {
+      bundledTotal = normalTotal;
+      discount = 0;
+    }
 
-    resultItems.push({
-      ...item,
-      lineTotal: finalPrice,
-      isBundle: isBundle,
-      bundleDiscount: itemDiscount,
-      bundleType: "Greenhouse (3-for-150)",
+    // Build result items with discount distribution
+    const resultItems = items.map((item) => {
+      const proportion = normalTotal > 0 ? item.originalTotal / normalTotal : 0;
+      const itemDiscount = discount * proportion;
+      const finalPrice = item.originalTotal - itemDiscount;
+      const isBundle = bundleCount > 0 && item.quantity >= 1;
+
+      return {
+        ...item,
+        lineTotal: finalPrice,
+        isBundle: isBundle,
+        bundleDiscount: itemDiscount,
+        bundleType: isBundle
+          ? `${item.product.category} ${item.product.type} (${bundleQty}-for-${bundlePrice})`
+          : null,
+        customPrice: false,
+      };
     });
-  });
 
-  // Process Indoor items with discount distribution
-  indoorPrerolls.forEach((item) => {
-    const proportion = item.originalTotal / indoorNormalTotal;
-    const itemDiscount = indoorDiscount * proportion;
-    const finalPrice = item.originalTotal - itemDiscount;
-    const isBundle = indoorBundleCount > 0 && item.quantity >= 1;
+    return {
+      items: resultItems,
+      totalUnits,
+      bundleCount,
+      remaining,
+      normalTotal,
+      bundledTotal,
+      discount,
+    };
+  }
 
-    resultItems.push({
+  // Calculate bundles for each category
+  const greenhousePrerollResult = calculateBundle(greenhousePrerolls, 3, 150);
+  const greenhouseFlowerResult = calculateBundle(greenhouseFlowers, 5, 250);
+  const indoorPrerollResult = calculateBundle(indoorPrerolls, 3, 300);
+  const indoorFlowerResult = calculateBundle(indoorFlowers, 5, 400);
+
+  // Process custom price items (no bundle, keep their custom price)
+  const customItems = otherItems
+    .filter((item) => item.isCustomPrice)
+    .map((item) => ({
       ...item,
-      lineTotal: finalPrice,
-      isBundle: isBundle,
-      bundleDiscount: itemDiscount,
-      bundleType: "Indoor (3-for-300)",
-    });
-  });
+      lineTotal: item.customPrice, // Use the custom price
+      isBundle: false,
+      bundleDiscount: 0,
+      bundleType: null,
+      customPrice: true,
+    }));
 
-  // Process other items (no bundle)
-  otherItems.forEach((item) => {
-    resultItems.push({
+  // Process other items (no bundle, regular price)
+  const regularOtherItems = otherItems
+    .filter((item) => !item.isCustomPrice)
+    .map((item) => ({
       ...item,
       lineTotal: item.originalTotal,
       isBundle: false,
       bundleDiscount: 0,
       bundleType: null,
-    });
+      customPrice: false,
+    }));
+
+  // Combine all results
+  const resultItems = [
+    ...greenhousePrerollResult.items,
+    ...greenhouseFlowerResult.items,
+    ...indoorPrerollResult.items,
+    ...indoorFlowerResult.items,
+    ...customItems,
+    ...regularOtherItems,
+  ];
+
+  // Calculate final totals
+  const subtotal =
+    greenhousePrerollResult.normalTotal +
+    greenhouseFlowerResult.normalTotal +
+    indoorPrerollResult.normalTotal +
+    indoorFlowerResult.normalTotal +
+    otherItems.reduce((sum, item) => sum + item.originalTotal, 0);
+
+  const total =
+    greenhousePrerollResult.bundledTotal +
+    greenhouseFlowerResult.bundledTotal +
+    indoorPrerollResult.bundledTotal +
+    indoorFlowerResult.bundledTotal +
+    customItems.reduce((sum, item) => sum + item.customPrice, 0) +
+    regularOtherItems.reduce((sum, item) => sum + item.originalTotal, 0);
+
+  const discount =
+    greenhousePrerollResult.discount +
+    greenhouseFlowerResult.discount +
+    indoorPrerollResult.discount +
+    indoorFlowerResult.discount;
+
+  console.log("Bundle Applied:", {
+    greenhousePrerolls: {
+      units: greenhousePrerollResult.totalUnits,
+      bundles: greenhousePrerollResult.bundleCount,
+      discount: greenhousePrerollResult.discount,
+    },
+    greenhouseFlowers: {
+      units: greenhouseFlowerResult.totalUnits,
+      bundles: greenhouseFlowerResult.bundleCount,
+      discount: greenhouseFlowerResult.discount,
+    },
+    indoorPrerolls: {
+      units: indoorPrerollResult.totalUnits,
+      bundles: indoorPrerollResult.bundleCount,
+      discount: indoorPrerollResult.discount,
+    },
+    indoorFlowers: {
+      units: indoorFlowerResult.totalUnits,
+      bundles: indoorFlowerResult.bundleCount,
+      discount: indoorFlowerResult.discount,
+    },
+    customItems: customItems.length,
+    subtotal,
+    total,
+    discount,
   });
 
   return {
     items: resultItems,
-    subtotal: greenhouseNormalTotal + indoorNormalTotal + otherTotal,
-    total: greenhouseBundledTotal + indoorBundledTotal + otherTotal,
-    discount: greenhouseDiscount + indoorDiscount,
+    subtotal: subtotal,
+    total: total,
+    discount: discount,
     bundleInfo: {
-      greenhouseBundles: greenhouseBundleCount,
-      greenhouseRemaining: greenhouseRemaining,
-      indoorBundles: indoorBundleCount,
-      indoorRemaining: indoorRemaining,
-      greenhouseDiscount: greenhouseDiscount,
-      indoorDiscount: indoorDiscount,
+      greenhousePrerollBundles: greenhousePrerollResult.bundleCount,
+      greenhousePrerollRemaining: greenhousePrerollResult.remaining,
+      greenhouseFlowerBundles: greenhouseFlowerResult.bundleCount,
+      greenhouseFlowerRemaining: greenhouseFlowerResult.remaining,
+      indoorPrerollBundles: indoorPrerollResult.bundleCount,
+      indoorPrerollRemaining: indoorPrerollResult.remaining,
+      indoorFlowerBundles: indoorFlowerResult.bundleCount,
+      indoorFlowerRemaining: indoorFlowerResult.remaining,
     },
   };
 }
@@ -1396,56 +1511,85 @@ function renderSalesHistory() {
       // Build items summary with price comparison for each item
       const itemsSummary = tx.items
         .map((item) => {
-          const originalPrice = item.unitPrice * item.quantity;
-          const paidPrice = item.lineTotal;
-          const isPriceEdited = paidPrice !== originalPrice;
-          const priceDiff = originalPrice - paidPrice;
-          const isDiscount = priceDiff > 0;
-          const isMarkup = priceDiff < 0;
-
+          // ============================================
+          // THIS IS THE CORRECT VERSION - USE ONLY THIS
+          // ============================================
+          let tags = "";
           let priceDisplay = "";
 
-          if (isPriceEdited) {
-            if (isDiscount) {
-              priceDisplay = `
-              <span class="price-strikethrough">${currency(originalPrice)}</span>
-              <span class="text-success fw-bold">${currency(paidPrice)}</span>
-              <span class="text-success small">(-${currency(Math.abs(priceDiff))})</span>
-            `;
-            } else if (isMarkup) {
-              priceDisplay = `
-              <span class="price-strikethrough">${currency(originalPrice)}</span>
-              <span class="text-warning fw-bold">${currency(paidPrice)}</span>
-              <span class="text-warning small">(+${currency(Math.abs(priceDiff))})</span>
-            `;
+          // Check for custom price first
+          if (item.customPrice) {
+            tags += " ✏️";
+            const originalPrice = item.unitPrice * item.quantity;
+            const paidPrice = item.lineTotal;
+            if (paidPrice !== originalPrice) {
+              const diff = originalPrice - paidPrice;
+              const isDiscount = diff > 0;
+              if (isDiscount) {
+                priceDisplay = `
+                  <span class="price-strikethrough">${currency(originalPrice)}</span>
+                  <span class="text-success fw-bold">${currency(paidPrice)}</span>
+                  <span class="text-success small">(-${currency(Math.abs(diff))}) ✏️</span>
+                `;
+              } else {
+                priceDisplay = `
+                  <span class="price-strikethrough">${currency(originalPrice)}</span>
+                  <span class="text-warning fw-bold">${currency(paidPrice)}</span>
+                  <span class="text-warning small">(+${currency(Math.abs(diff))}) ✏️</span>
+                `;
+              }
+            } else {
+              priceDisplay = `<span>${currency(paidPrice)} ✏️</span>`;
             }
-          } else {
-            priceDisplay = `<span>${currency(paidPrice)}</span>`;
-          }
-
-          let tags = "";
-          if (item.isBundle) {
-            // Check if it's a category bundle
-            const product = getProductById(item.productId);
-            if (product) {
+          } else if (item.isBundle) {
+            // Check bundle type
+            if (item.bundleType) {
               if (
-                product.category === "Greenhouse" &&
-                product.type === "Pre-roll"
+                item.bundleType.includes("Greenhouse") &&
+                item.bundleType.includes("Pre-roll")
               ) {
                 tags += " 🌿 (3-for-150)";
               } else if (
-                product.category === "Indoor" &&
-                product.type === "Pre-roll"
+                item.bundleType.includes("Greenhouse") &&
+                item.bundleType.includes("Flower")
+              ) {
+                tags += " 🌺 (5-for-250)";
+              } else if (
+                item.bundleType.includes("Indoor") &&
+                item.bundleType.includes("Pre-roll")
               ) {
                 tags += " 🏠 (3-for-300)";
+              } else if (
+                item.bundleType.includes("Indoor") &&
+                item.bundleType.includes("Flower")
+              ) {
+                tags += " 🏠 (5-for-400)";
               } else {
                 tags += " 🎯";
               }
             } else {
               tags += " 🎯";
             }
+            // Show bundle price
+            const originalPrice = item.unitPrice * item.quantity;
+            const paidPrice = item.lineTotal;
+            if (paidPrice !== originalPrice) {
+              const diff = originalPrice - paidPrice;
+              priceDisplay = `
+                <span class="price-strikethrough">${currency(originalPrice)}</span>
+                <span class="text-success fw-bold">${currency(paidPrice)}</span>
+                <span class="text-success small">(-${currency(Math.abs(diff))})</span>
+              `;
+            } else {
+              priceDisplay = `<span>${currency(paidPrice)}</span>`;
+            }
+          } else {
+            // Regular price (no bundle, no custom price)
+            priceDisplay = `<span>${currency(item.lineTotal || item.originalTotal)}</span>`;
           }
-          if (item.customPrice) tags += " ✏️";
+          // ============================================
+          // END OF CORRECT VERSION
+          // ============================================
 
           return `${item.quantity}x ${item.productName}${tags} → ${priceDisplay}`;
         })

@@ -799,6 +799,23 @@ body {
   width: auto;
 }
 
+/* Custom price indicator */
+.custom-price-item {
+  border-left: 3px solid #7c3aed !important;
+  background: rgba(124, 58, 237, 0.05);
+}
+
+.custom-price-badge {
+  display: inline-block;
+  background: #7c3aed;
+  color: white;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  margin-left: 0.3rem;
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;
