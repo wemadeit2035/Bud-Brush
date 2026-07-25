@@ -909,6 +909,143 @@ function calculatePrice(product, quantity) {
   return best;
 }
 
+// ----- CART-LEVEL BUNDLE CALCULATION -----
+function applyCartBundles(cartItems) {
+  // Separate items into categories
+  const greenhousePrerolls = [];
+  const indoorPrerolls = [];
+  const otherItems = [];
+
+  let totalDiscount = 0;
+  const processedItems = [];
+
+  // Categorize items
+  cartItems.forEach((item) => {
+    const product = getProductById(item.productId);
+    if (!product) return;
+
+    if (product.category === "Greenhouse" && product.type === "Pre-roll") {
+      greenhousePrerolls.push({
+        ...item,
+        product: product,
+        originalTotal: product.price * item.quantity,
+      });
+    } else if (product.category === "Indoor" && product.type === "Pre-roll") {
+      indoorPrerolls.push({
+        ...item,
+        product: product,
+        originalTotal: product.price * item.quantity,
+      });
+    } else {
+      otherItems.push({
+        ...item,
+        product: product,
+        originalTotal: product.price * item.quantity,
+      });
+    }
+  });
+
+  // Process Greenhouse Pre-rolls (3 for R150)
+  let greenhouseTotalUnits = greenhousePrerolls.reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  );
+  let greenhouseBundleCount = Math.floor(greenhouseTotalUnits / 3);
+  let greenhouseRemaining = greenhouseTotalUnits % 3;
+
+  // Process Indoor Pre-rolls (3 for R300)
+  let indoorTotalUnits = indoorPrerolls.reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  );
+  let indoorBundleCount = Math.floor(indoorTotalUnits / 3);
+  let indoorRemaining = indoorTotalUnits % 3;
+
+  // Calculate totals
+  let greenhouseNormalTotal = greenhousePrerolls.reduce(
+    (sum, item) => sum + item.originalTotal,
+    0,
+  );
+  let indoorNormalTotal = indoorPrerolls.reduce(
+    (sum, item) => sum + item.originalTotal,
+    0,
+  );
+  let otherTotal = otherItems.reduce(
+    (sum, item) => sum + item.originalTotal,
+    0,
+  );
+
+  // Calculate bundled prices
+  let greenhouseBundledTotal =
+    greenhouseBundleCount * 150 + greenhouseRemaining * 60; // Average price for remaining
+  let indoorBundledTotal = indoorBundleCount * 300 + indoorRemaining * 90; // Average price for remaining
+
+  // Calculate discounts
+  let greenhouseDiscount = greenhouseNormalTotal - greenhouseBundledTotal;
+  let indoorDiscount = indoorNormalTotal - indoorBundledTotal;
+
+  // Distribute discounts proportionally to each item
+  const resultItems = [];
+
+  // Process Greenhouse items with discount distribution
+  greenhousePrerolls.forEach((item) => {
+    const proportion = item.originalTotal / greenhouseNormalTotal;
+    const itemDiscount = greenhouseDiscount * proportion;
+    const finalPrice = item.originalTotal - itemDiscount;
+    const isBundle = greenhouseBundleCount > 0 && item.quantity >= 1;
+
+    resultItems.push({
+      ...item,
+      lineTotal: finalPrice,
+      isBundle: isBundle,
+      bundleDiscount: itemDiscount,
+      bundleType: "Greenhouse (3-for-150)",
+    });
+  });
+
+  // Process Indoor items with discount distribution
+  indoorPrerolls.forEach((item) => {
+    const proportion = item.originalTotal / indoorNormalTotal;
+    const itemDiscount = indoorDiscount * proportion;
+    const finalPrice = item.originalTotal - itemDiscount;
+    const isBundle = indoorBundleCount > 0 && item.quantity >= 1;
+
+    resultItems.push({
+      ...item,
+      lineTotal: finalPrice,
+      isBundle: isBundle,
+      bundleDiscount: itemDiscount,
+      bundleType: "Indoor (3-for-300)",
+    });
+  });
+
+  // Process other items (no bundle)
+  otherItems.forEach((item) => {
+    resultItems.push({
+      ...item,
+      lineTotal: item.originalTotal,
+      isBundle: false,
+      bundleDiscount: 0,
+      bundleType: null,
+    });
+  });
+
+  return {
+    items: resultItems,
+    subtotal: greenhouseNormalTotal + indoorNormalTotal + otherTotal,
+    total: greenhouseBundledTotal + indoorBundledTotal + otherTotal,
+    discount: greenhouseDiscount + indoorDiscount,
+    bundleInfo: {
+      greenhouseBundles: greenhouseBundleCount,
+      greenhouseRemaining: greenhouseRemaining,
+      indoorBundles: indoorBundleCount,
+      indoorRemaining: indoorRemaining,
+      greenhouseDiscount: greenhouseDiscount,
+      indoorDiscount: indoorDiscount,
+    },
+  };
+}
+
 // ----- LOAD DATA FROM DATABASE -----
 async function loadData() {
   try {
@@ -1582,7 +1719,7 @@ function addToCart(productId, qty = 1) {
 }
 
 // ============================================
-// NEW CHECKOUT FUNCTION (REPLACE THE OLD ONE)
+// CHECKOUT FUNCTION (WITH CART-LEVEL BUNDLES)
 // ============================================
 async function checkout() {
   if (!cart.length) {
@@ -1591,12 +1728,6 @@ async function checkout() {
   }
 
   const payment = document.getElementById("paymentMethod").value;
-
-  // Calculate basket totals
-  let subtotal = 0;
-  let total = 0;
-  let discount = 0;
-  const items = [];
 
   // Check if Uberzol is selected
   let uberzolTotal = null;
@@ -1613,22 +1744,35 @@ async function checkout() {
     }
   }
 
-  // Calculate normal subtotal for distribution (using custom prices if set)
-  let calculatedSubtotal = 0;
-  cart.forEach((item) => {
-    const product = getProductById(item.productId);
-    if (product) {
-      // Use custom price if set, otherwise use calculated price
-      const price =
-        item.customPrice !== undefined
-          ? item.customPrice
-          : calculatePrice(product, item.quantity);
-      calculatedSubtotal += price;
-    }
-  });
+  // Apply cart-level bundles
+  const bundleResult = applyCartBundles(cart);
+  const { items, subtotal, total, discount, bundleInfo } = bundleResult;
 
-  // Process each cart item
-  for (const item of cart) {
+  console.log("Bundle Info:", bundleInfo);
+  console.log("Items after bundles:", items);
+
+  // For Uberzol, recalculate totals based on manual amount
+  let finalTotal = total;
+  let finalItems = items;
+
+  if (payment === "Uberzol" && uberzolTotal !== null) {
+    // For Uberzol, distribute the total proportionally
+    const proportionFactor = uberzolTotal / subtotal;
+    finalItems = items.map((item) => ({
+      ...item,
+      lineTotal: item.lineTotal * proportionFactor,
+      isBundle: item.isBundle,
+      bundleDiscount: 0, // No discount when using Uberzol
+      bundleType: item.bundleType,
+    }));
+    finalTotal = uberzolTotal;
+  }
+
+  // Reduce stock and prepare transaction items
+  const transactionItems = [];
+  let actualTotal = 0;
+
+  for (const item of finalItems) {
     const product = getProductById(item.productId);
     if (!product) continue;
 
@@ -1638,74 +1782,41 @@ async function checkout() {
       return;
     }
 
-    // Calculate item price
-    let itemTotal;
-    let isBundle = false;
-    let bundleDiscount = 0;
-    const normalPrice = product.price * item.quantity;
-
-    if (payment === "Uberzol" && uberzolTotal !== null) {
-      const proportion =
-        calculatedSubtotal > 0
-          ? (product.price * item.quantity) / calculatedSubtotal
-          : 1 / cart.length;
-      itemTotal = uberzolTotal * proportion;
-    } else {
-      // Check if bundle pricing applies
-      const bundlePrice = calculatePrice(product, item.quantity);
-      if (bundlePrice < normalPrice) {
-        isBundle = true;
-        bundleDiscount = normalPrice - bundlePrice;
-        itemTotal = bundlePrice;
-
-        // Log which type of bundle was applied
-        if (product.category === "Greenhouse" && product.type === "Pre-roll") {
-          console.log(
-            `🎯 Greenhouse Bundle: ${item.quantity}x ${product.name} = ${currency(itemTotal)} (saved ${currency(bundleDiscount)})`,
-          );
-        } else if (
-          product.category === "Indoor" &&
-          product.type === "Pre-roll"
-        ) {
-          console.log(
-            `🎯 Indoor Bundle: ${item.quantity}x ${product.name} = ${currency(itemTotal)} (saved ${currency(bundleDiscount)})`,
-          );
-        }
-      } else {
-        itemTotal = normalPrice;
-      }
-    }
-
     // Reduce stock
     product.stock -= item.quantity;
 
-    // Add to items array
-    items.push({
+    // Add to transaction items
+    transactionItems.push({
       productId: String(product.id),
       productName: product.name,
       quantity: item.quantity,
       unitPrice: product.price,
-      lineTotal: itemTotal,
-      isBundle: isBundle,
-      bundleDiscount: bundleDiscount,
-      customPrice: item.customPrice !== undefined, // Flag to indicate custom price was used
+      lineTotal: item.lineTotal,
+      isBundle: item.isBundle,
+      bundleDiscount: item.bundleDiscount || 0,
+      customPrice: item.customPrice !== undefined || payment === "Uberzol",
     });
 
-    subtotal += normalPrice;
-    total += itemTotal;
-    discount += bundleDiscount;
+    actualTotal += item.lineTotal;
   }
+
+  // Calculate discounts for display
+  const totalDiscount = subtotal - total + (payment === "Uberzol" ? 0 : 0);
 
   // Create transaction
   const transaction = {
     payment: payment,
-    subtotal: subtotal,
-    discount: discount,
-    total: total,
-    items: items,
+    subtotal: payment === "Uberzol" ? actualTotal : subtotal,
+    discount: payment === "Uberzol" ? 0 : totalDiscount,
+    total: actualTotal,
+    items: transactionItems,
     date: new Date().toISOString(),
     note:
-      payment === "Uberzol" ? `Uberzol total: ${currency(uberzolTotal)}` : null,
+      payment === "Uberzol"
+        ? `Uberzol total: ${currency(uberzolTotal)}`
+        : bundleInfo.greenhouseBundles > 0 || bundleInfo.indoorBundles > 0
+          ? `🌿 ${bundleInfo.greenhouseBundles}× Greenhouse bundles · 🏠 ${bundleInfo.indoorBundles}× Indoor bundles`
+          : null,
   };
 
   console.log("Transaction:", transaction);
@@ -1725,29 +1836,29 @@ async function checkout() {
   showTransactionSummary(transaction);
 }
 
-// ----- TRANSACTION SUMMARY -----
 function showTransactionSummary(transaction) {
   const itemsList = transaction.items
     .map((item) => {
-      const originalPrice = item.unitPrice * item.quantity;
-      const paidPrice = item.lineTotal;
-      const isPriceEdited = paidPrice !== originalPrice;
-      const priceDiff = originalPrice - paidPrice;
-      const isDiscount = priceDiff > 0;
-      const isMarkup = priceDiff < 0;
-
       let tags = "";
       let priceDisplay = "";
 
-      if (item.isBundle) tags += " 🎯 (Bundle)";
-      if (item.customPrice) tags += " ✏️ (Price Edited)";
-
-      if (isPriceEdited) {
-        if (isDiscount) {
-          priceDisplay = `~~${currency(originalPrice)}~~ → ${currency(paidPrice)} (Saved ${currency(Math.abs(priceDiff))})`;
-        } else if (isMarkup) {
-          priceDisplay = `~~${currency(originalPrice)}~~ → ${currency(paidPrice)} (+${currency(Math.abs(priceDiff))})`;
+      if (item.isBundle) {
+        if (item.bundleType === "Greenhouse (3-for-150)") {
+          tags += " 🌿 (3-for-150)";
+        } else if (item.bundleType === "Indoor (3-for-300)") {
+          tags += " 🏠 (3-for-300)";
+        } else {
+          tags += " 🎯";
         }
+      }
+      if (item.customPrice) tags += " ✏️";
+
+      const originalPrice = item.unitPrice * item.quantity;
+      const paidPrice = item.lineTotal;
+
+      if (paidPrice !== originalPrice) {
+        const diff = originalPrice - paidPrice;
+        priceDisplay = `~~${currency(originalPrice)}~~ → ${currency(paidPrice)} (Saved ${currency(diff)})`;
       } else {
         priceDisplay = `${currency(paidPrice)}`;
       }
@@ -1756,45 +1867,32 @@ function showTransactionSummary(transaction) {
     })
     .join("\n");
 
-  // Calculate total discount percentage
-  const discountPercentage =
-    transaction.subtotal > 0
-      ? ((transaction.discount / transaction.subtotal) * 100).toFixed(1)
-      : 0;
-
-  // Count how many items were price edited
-  const priceEditedItems = transaction.items.filter((item) => {
-    const originalPrice = item.unitPrice * item.quantity;
-    return item.lineTotal !== originalPrice;
-  }).length;
-
   const summary = `
 📋 Transaction Summary
 ${"=".repeat(50)}
 Payment: ${transaction.payment}
-Items: ${transaction.items.length} (${priceEditedItems} price edited)
+Items: ${transaction.items.length}
 ${"-".repeat(50)}
 ${itemsList}
 ${"-".repeat(50)}
 Subtotal: ${currency(transaction.subtotal)}
-Discount: ${currency(transaction.discount)} (${discountPercentage}% off)
+Discount: ${currency(transaction.discount)}
 Total: ${currency(transaction.total)}
 ${"=".repeat(50)}
 `;
 
   console.log(summary);
 
-  // Show alert with discount info
   let discountMessage = "";
   if (transaction.discount > 0) {
-    discountMessage = `\n💸 Discount: ${currency(transaction.discount)} (${discountPercentage}% off)`;
+    discountMessage = `\n💸 Discount: ${currency(transaction.discount)}`;
   }
 
   alert(
     `✅ Transaction Complete!\n\n` +
       `Payment: ${transaction.payment}\n` +
-      `Items: ${transaction.items.length} (${priceEditedItems} price edited)${discountMessage}\n` +
-      `Total: ${currency(transaction.total)}\n` +
+      `Items: ${transaction.items.length}\n` +
+      `Total: ${currency(transaction.total)}${discountMessage}\n` +
       `\nView details in console.`,
   );
 }
