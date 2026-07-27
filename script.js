@@ -6,10 +6,30 @@
 const ADMIN_PASSWORD = "B&B420";
 const SESSION_KEY_AUTH = "bb_auth";
 
-// Supabase Configuration - Replace with your credentials
+// Supabase Configuration
 const SUPABASE_URL = "https://ghfkqospijjdgixporvy.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoZmtxb3NwaWpqZGdpeHBvcnZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NDE5NzYsImV4cCI6MjEwMDIxNzk3Nn0.rVOZJcbxMCiu-0O_OGrj9F_2aQZ4g77P17jVMoVPN6s";
+
+// ----- CONSTANTS -----
+const PAYMENT_METHODS = {
+  CASH: "Cash",
+  YOCO: "Yoco",
+  EFT: "EFT",
+  UBERZOL: "Uberzol",
+};
+
+const BUNDLE_RULES = {
+  GREENHOUSE_PREROLL: { qty: 3, price: 150 },
+  GREENHOUSE_FLOWER: { qty: 5, price: 250 },
+  INDOOR_PREROLL: { qty: 3, price: 300 },
+  INDOOR_FLOWER: { qty: 5, price: 400 },
+};
+
+const STOCK_THRESHOLDS = {
+  LOW: 5,
+  WARNING: 15,
+};
 
 // ----- STATE -----
 let products = [];
@@ -183,6 +203,114 @@ const defaultProducts = [
 ];
 
 // ============================================
+// ERROR HANDLER
+// ============================================
+class ErrorHandler {
+  static handle(error, context = "") {
+    console.error(`[${context}]`, error);
+
+    let message = "An unexpected error occurred.";
+    if (error.message?.includes("duplicate key")) {
+      message = "This item already exists.";
+    } else if (error.message?.includes("foreign key")) {
+      message = "This item is referenced by other records.";
+    } else if (error.message?.includes("network")) {
+      message = "Network error. Please check your connection.";
+    } else if (error.message) {
+      message = error.message;
+    }
+
+    showToast("Error", message, "error");
+    return message;
+  }
+}
+
+// ============================================
+// RETRY LOGIC
+// ============================================
+async function withRetry(fn, maxRetries = 3, delay = 1000) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxRetries) break;
+      await new Promise((resolve) => setTimeout(resolve, delay * attempt));
+    }
+  }
+  throw lastError;
+}
+
+// ============================================
+// VALIDATORS
+// ============================================
+const Validators = {
+  isPositiveNumber: (value) => typeof value === "number" && value > 0,
+  isNonNegativeNumber: (value) => typeof value === "number" && value >= 0,
+  isNotEmpty: (value) => value && value.trim().length > 0,
+
+  sanitizeString: (value) => {
+    if (!value) return "";
+    return value.replace(/[<>]/g, "").trim();
+  },
+
+  validateTransaction: (data) => {
+    const errors = [];
+    if (!data.items || data.items.length === 0) {
+      errors.push("Transaction must have at least one item");
+    }
+    if (
+      !data.payment ||
+      !Object.values(PAYMENT_METHODS).includes(data.payment)
+    ) {
+      errors.push("Invalid payment method");
+    }
+    if (data.total < 0) {
+      errors.push("Total cannot be negative");
+    }
+    data.items?.forEach((item, index) => {
+      if (item.quantity <= 0) {
+        errors.push(`Item ${index + 1}: Quantity must be greater than 0`);
+      }
+      if (item.lineTotal < 0) {
+        errors.push(`Item ${index + 1}: Price cannot be negative`);
+      }
+    });
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  },
+};
+
+// ============================================
+// CART CALCULATOR
+// ============================================
+class CartCalculator {
+  static calculateSubtotal(cartItems) {
+    return cartItems.reduce((sum, item) => {
+      const product = getProductById(item.productId);
+      if (!product) return sum;
+      const price =
+        item.customPrice !== undefined
+          ? item.customPrice
+          : calculatePrice(product, item.quantity);
+      return sum + price;
+    }, 0);
+  }
+
+  static calculateTotalWithBundles(cartItems) {
+    const result = applyCartBundles(cartItems);
+    return result.total;
+  }
+
+  static getItemCount(cartItems) {
+    return cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  }
+}
+
+// ============================================
 // SUPABASE DATABASE CLASS
 // ============================================
 class BudAndBrushSupabase {
@@ -193,25 +321,62 @@ class BudAndBrushSupabase {
 
   async init() {
     try {
-      if (typeof supabaseJs === "undefined") {
-        throw new Error("Supabase library not loaded");
+      // Check if supabase is available globally
+      let supabaseJs = window.supabaseJs || window.supabase;
+
+      if (!supabaseJs) {
+        // Try to load it dynamically
+        console.log("Supabase not loaded, attempting to load...");
+        await this.loadSupabaseLibrary();
+        supabaseJs = window.supabaseJs || window.supabase;
+      }
+
+      if (!supabaseJs) {
+        throw new Error(
+          "Supabase library not available. Please check your internet connection and try again.",
+        );
       }
 
       const { createClient } = supabaseJs;
       this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+      // Test connection
       const { data, error } = await this.client
         .from("products")
         .select("count", { count: "exact", head: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase connection test failed:", error);
+        throw error;
+      }
 
       this.initialized = true;
+      console.log("✅ Supabase initialized successfully");
       return true;
     } catch (error) {
       console.error("Supabase initialization error:", error);
       return false;
     }
+  }
+
+  async loadSupabaseLibrary() {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src =
+        "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js";
+      script.onload = () => {
+        console.log("✅ Supabase library loaded dynamically");
+        resolve();
+      };
+      script.onerror = () => {
+        reject(
+          new Error(
+            "Failed to load Supabase library. Please check your internet connection.",
+          ),
+        );
+      };
+      document.head.appendChild(script);
+    });
   }
 
   // ----- AUTHENTICATION -----
@@ -343,6 +508,7 @@ class BudAndBrushSupabase {
 
       if (error) {
         console.error("Bulk upsert error:", error);
+        // Fallback to individual saves
         for (const product of formattedProducts) {
           await this.saveProduct(product);
         }
@@ -422,194 +588,10 @@ class BudAndBrushSupabase {
     }
   }
 
-  // ----- SALES -----
-
-  async getSale(id) {
-    try {
-      const { data, error } = await this.client
-        .from("sales")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error("Error getting sale:", error);
-      return null;
-    }
-  }
-
-  async saveSale(sale) {
-    try {
-      // Map camelCase to lowercase for database
-      const saleData = {
-        productid: String(sale.productId || ""),
-        productname: String(sale.productName || ""),
-        quantity: Number(sale.quantity) || 0,
-        price: Number(sale.price) || 0,
-        payment: String(sale.payment || "Cash"),
-        total: Number(sale.total) || 0,
-        date: sale.date || new Date().toISOString(),
-      };
-
-      // Only add note if it exists
-      if (sale.note) {
-        saleData.note = String(sale.note);
-      }
-
-      console.log("Saving sale:", saleData);
-
-      const { data, error } = await this.client
-        .from("sales")
-        .insert(saleData)
-        .select();
-
-      if (error) {
-        console.error("Insert error:", error);
-        throw error;
-      }
-
-      console.log("Sale saved successfully with ID:", data?.[0]?.id);
-      return data?.[0]?.id;
-    } catch (error) {
-      console.error("Error saving sale:", error);
-      throw error;
-    }
-  }
-
-  async saveSales(sales) {
-    try {
-      for (const sale of sales) {
-        await this.saveSale(sale);
-      }
-      return true;
-    } catch (error) {
-      console.error("Error saving sales:", error);
-      throw error;
-    }
-  }
-
-  async deleteSale(id) {
-    try {
-      const { error } = await this.client.from("sales").delete().eq("id", id);
-
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      console.error("Error deleting sale:", error);
-      throw error;
-    }
-  }
-
-  async getSalesByDate(startDate, endDate) {
-    try {
-      const { data, error } = await this.client
-        .from("sales")
-        .select("*")
-        .gte("date", startDate.toISOString())
-        .lte("date", endDate.toISOString())
-        .order("date", { ascending: false });
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error("Error getting sales by date:", error);
-      return [];
-    }
-  }
-
-  async getSalesByPayment(payment) {
-    try {
-      const { data, error } = await this.client
-        .from("sales")
-        .select("*")
-        .eq("payment", payment)
-        .order("date", { ascending: false });
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error("Error getting sales by payment:", error);
-      return [];
-    }
-  }
-
-  async getDailyRevenue(date) {
-    try {
-      const start = new Date(date);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(date);
-      end.setHours(23, 59, 59, 999);
-
-      const { data, error } = await this.client
-        .from("sales")
-        .select("total")
-        .gte("date", start.toISOString())
-        .lte("date", end.toISOString());
-
-      if (error) throw error;
-
-      return data.reduce((sum, s) => sum + (s.total || 0), 0);
-    } catch (error) {
-      console.error("Error getting daily revenue:", error);
-      return 0;
-    }
-  }
-
-  async getRevenueByPayment(payment) {
-    try {
-      const { data, error } = await this.client
-        .from("sales")
-        .select("total")
-        .eq("payment", payment);
-
-      if (error) throw error;
-
-      return data.reduce((sum, s) => sum + (s.total || 0), 0);
-    } catch (error) {
-      console.error("Error getting revenue by payment:", error);
-      return 0;
-    }
-  }
-
-  async getTopProducts(limit = 5) {
-    try {
-      const { data: salesData, error } = await this.client
-        .from("sales")
-        .select("productid, productname, quantity, total");
-
-      if (error) throw error;
-
-      const productMap = new Map();
-      salesData.forEach((sale) => {
-        if (!productMap.has(sale.productid)) {
-          productMap.set(sale.productid, {
-            id: sale.productid,
-            name: sale.productname,
-            quantity: 0,
-            revenue: 0,
-          });
-        }
-        const entry = productMap.get(sale.productid);
-        entry.quantity += sale.quantity || 0;
-        entry.revenue += sale.total || 0;
-      });
-
-      return Array.from(productMap.values())
-        .sort((a, b) => b.quantity - a.quantity)
-        .slice(0, limit);
-    } catch (error) {
-      console.error("Error getting top products:", error);
-      return [];
-    }
-  }
-
   // ============================================
   // TRANSACTION FUNCTIONS
   // ============================================
 
-  // Add this to your BudAndBrushSupabase class
   async saveTransaction(transaction) {
     try {
       const { data: txData, error: txError } = await this.client
@@ -628,7 +610,6 @@ class BudAndBrushSupabase {
 
       if (txError) throw txError;
 
-      // Insert all items
       const items = transaction.items.map((item) => ({
         transaction_id: txData.id,
         product_id: item.productId,
@@ -638,7 +619,10 @@ class BudAndBrushSupabase {
         line_total: item.lineTotal,
         is_bundle: item.isBundle || false,
         bundle_discount: item.bundleDiscount || 0,
+        custom_price: item.customPrice || false, // ✅ This will now work
       }));
+
+      console.log("📝 Saving items with custom_price:", items);
 
       const { error: itemsError } = await this.client
         .from("transaction_items")
@@ -655,7 +639,6 @@ class BudAndBrushSupabase {
 
   async getAllTransactions() {
     try {
-      // Get all transactions
       const { data: transactions, error: txError } = await this.client
         .from("transactions")
         .select("*")
@@ -663,14 +646,12 @@ class BudAndBrushSupabase {
 
       if (txError) throw txError;
 
-      // Get all transaction items
       const { data: items, error: itemsError } = await this.client
         .from("transaction_items")
         .select("*");
 
       if (itemsError) throw itemsError;
 
-      // Group items by transaction
       const itemsByTransaction = {};
       items.forEach((item) => {
         if (!itemsByTransaction[item.transaction_id]) {
@@ -684,10 +665,10 @@ class BudAndBrushSupabase {
           lineTotal: item.line_total,
           isBundle: item.is_bundle,
           bundleDiscount: item.bundle_discount,
+          customPrice: item.custom_price || false, // ✅ ADD THIS
         });
       });
 
-      // Combine transactions with their items
       return transactions.map((tx) => ({
         id: tx.id,
         date: tx.transaction_date,
@@ -702,6 +683,29 @@ class BudAndBrushSupabase {
     } catch (error) {
       console.error("Error getting transactions:", error);
       return [];
+    }
+  }
+
+  async deleteTransaction(transactionId) {
+    try {
+      const { error: itemsError } = await this.client
+        .from("transaction_items")
+        .delete()
+        .eq("transaction_id", transactionId);
+
+      if (itemsError) throw itemsError;
+
+      const { error: txError } = await this.client
+        .from("transactions")
+        .delete()
+        .eq("id", transactionId);
+
+      if (txError) throw txError;
+
+      return true;
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+      throw error;
     }
   }
 
@@ -730,41 +734,6 @@ class BudAndBrushSupabase {
       };
     }
   }
-
-  // ----- REAL-TIME SUBSCRIPTIONS -----
-  subscribeToProducts(callback) {
-    return this.client
-      .channel("products_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "products",
-        },
-        (payload) => {
-          callback(payload);
-        },
-      )
-      .subscribe();
-  }
-
-  subscribeToSales(callback) {
-    return this.client
-      .channel("sales_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "sales",
-        },
-        (payload) => {
-          callback(payload);
-        },
-      )
-      .subscribe();
-  }
 }
 
 // ============================================
@@ -774,21 +743,45 @@ let database = null;
 
 async function initDatabase() {
   try {
-    if (window.supabaseLoadPromise) {
-      await window.supabaseLoadPromise;
+    // Check if supabase is available
+    let supabaseJs = window.supabaseJs || window.supabase;
+
+    if (!supabaseJs) {
+      console.log("🔄 Loading Supabase library...");
+      setSyncStatus("Loading Supabase...", "info");
+
+      // Try loading the library
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src =
+          "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js";
+        script.onload = () => {
+          console.log("✅ Supabase library loaded");
+          resolve();
+        };
+        script.onerror = () => {
+          reject(new Error("Failed to load Supabase library"));
+        };
+        document.head.appendChild(script);
+      });
+
+      supabaseJs = window.supabaseJs || window.supabase;
     }
 
-    if (typeof supabaseJs === "undefined") {
-      throw new Error("Supabase library not loaded");
+    if (!supabaseJs) {
+      throw new Error(
+        "Supabase library not available. Please check your internet connection.",
+      );
     }
 
     database = new BudAndBrushSupabase();
     const initialized = await database.init();
 
     if (!initialized) {
-      throw new Error("Failed to initialize Supabase");
+      throw new Error("Failed to initialize Supabase connection");
     }
 
+    // Check if products exist
     const existingProducts = await database.getAllProducts();
     console.log("Existing products:", existingProducts.length);
 
@@ -796,15 +789,18 @@ async function initDatabase() {
       console.log("No products found, seeding default data...");
       await database.saveProducts(defaultProducts);
       console.log("Default products seeded successfully!");
-
-      const verifyProducts = await database.getAllProducts();
-      console.log("Products after seeding:", verifyProducts.length);
     }
 
+    setSyncStatus("Connected to database", "success");
     return true;
   } catch (error) {
     console.error("Database initialization error:", error);
     setSyncStatus("Database error: " + error.message, "danger");
+    showToast(
+      "Connection Error",
+      "Failed to connect to database. Please refresh and try again.",
+      "error",
+    );
     return false;
   }
 }
@@ -871,7 +867,6 @@ function calculatePrice(product, quantity) {
   const unitPrice = Number(product.price) || 0;
   let best = unitPrice * quantity;
 
-  // Check product-specific bundles (existing)
   const rules = product.bundles || [];
   rules.forEach((rule) => {
     if (!rule || rule.qty <= 0) return;
@@ -881,26 +876,20 @@ function calculatePrice(product, quantity) {
     if (total < best) best = total;
   });
 
-  // NEW: Category-based bundle pricing
-  // Any 3 Greenhouse Pre-rolls for R150
+  // Category-based bundles
   if (product.category === "Greenhouse" && product.type === "Pre-roll") {
-    // Check if we can apply the bundle (only if quantity >= 3)
     if (quantity >= 3) {
       const bundleCount = Math.floor(quantity / 3);
       const rem = quantity % 3;
-      // Each bundle of 3 costs R150
       const total = bundleCount * 150 + rem * unitPrice;
       if (total < best) best = total;
     }
   }
 
-  // Any 3 Indoor Pre-rolls for R300
   if (product.category === "Indoor" && product.type === "Pre-roll") {
-    // Check if we can apply the bundle (only if quantity >= 3)
     if (quantity >= 3) {
       const bundleCount = Math.floor(quantity / 3);
       const rem = quantity % 3;
-      // Each bundle of 3 costs R300
       const total = bundleCount * 300 + rem * unitPrice;
       if (total < best) best = total;
     }
@@ -911,21 +900,15 @@ function calculatePrice(product, quantity) {
 
 // ----- CART-LEVEL BUNDLE CALCULATION -----
 function applyCartBundles(cartItems) {
-  // Separate items into categories - Pre-rolls vs Flowers
-  const greenhousePrerolls = [];
-  const greenhouseFlowers = [];
-  const indoorPrerolls = [];
-  const indoorFlowers = [];
-  const otherItems = [];
+  const processedItems = [];
+  const remainingItems = [];
 
-  // Categorize items
   cartItems.forEach((item) => {
     const product = getProductById(item.productId);
     if (!product) return;
 
-    // If item has a custom price, it goes to other items (no bundle applied)
     if (item.customPrice !== undefined) {
-      otherItems.push({
+      remainingItems.push({
         ...item,
         product: product,
         originalTotal: product.price * item.quantity,
@@ -934,51 +917,69 @@ function applyCartBundles(cartItems) {
       return;
     }
 
+    if (product.bundles && product.bundles.length > 0) {
+      const bundlePrice = calculatePrice(product, item.quantity);
+      const originalTotal = product.price * item.quantity;
+      const isBundle = bundlePrice < originalTotal;
+      const bundleDiscount = isBundle ? originalTotal - bundlePrice : 0;
+
+      processedItems.push({
+        ...item,
+        product: product,
+        originalTotal: originalTotal,
+        lineTotal: isBundle ? bundlePrice : originalTotal,
+        isBundle: isBundle,
+        bundleDiscount: bundleDiscount,
+        bundleType: isBundle ? `Product Bundle (${product.name})` : null,
+        customPrice: item.customPrice !== undefined ? item.customPrice : false,
+      });
+    } else {
+      remainingItems.push({
+        ...item,
+        product: product,
+        originalTotal: product.price * item.quantity,
+        isCustomPrice: false,
+      });
+    }
+  });
+
+  const greenhousePrerolls = [];
+  const greenhouseFlowers = [];
+  const indoorPrerolls = [];
+  const indoorFlowers = [];
+  const otherItems = [];
+
+  remainingItems.forEach((item) => {
+    if (item.isCustomPrice) {
+      otherItems.push(item);
+      return;
+    }
+
+    const product = item.product;
     if (product.category === "Greenhouse" && product.type === "Pre-roll") {
-      greenhousePrerolls.push({
-        ...item,
-        product: product,
-        originalTotal: product.price * item.quantity,
-      });
+      greenhousePrerolls.push(item);
     } else if (product.category === "Greenhouse" && product.type === "Flower") {
-      greenhouseFlowers.push({
-        ...item,
-        product: product,
-        originalTotal: product.price * item.quantity,
-      });
+      greenhouseFlowers.push(item);
     } else if (
       (product.category === "Indoor" ||
         product.category === "Indoor Exotic" ||
         product.category === "Indoor Hydro") &&
       product.type === "Pre-roll"
     ) {
-      indoorPrerolls.push({
-        ...item,
-        product: product,
-        originalTotal: product.price * item.quantity,
-      });
+      indoorPrerolls.push(item);
     } else if (
       (product.category === "Indoor" ||
         product.category === "Indoor Exotic" ||
         product.category === "Indoor Hydro") &&
       product.type === "Flower"
     ) {
-      indoorFlowers.push({
-        ...item,
-        product: product,
-        originalTotal: product.price * item.quantity,
-      });
+      indoorFlowers.push(item);
     } else {
-      otherItems.push({
-        ...item,
-        product: product,
-        originalTotal: product.price * item.quantity,
-      });
+      otherItems.push(item);
     }
   });
 
-  // Helper function to calculate bundle for a category
-  function calculateBundle(items, bundleQty, bundlePrice) {
+  function calculateBundle(items, bundleQty, bundlePrice, bundleName) {
     if (items.length === 0) {
       return {
         items: [],
@@ -1024,21 +1025,18 @@ function applyCartBundles(cartItems) {
       discount = 0;
     }
 
-    // Build result items with discount distribution
     const resultItems = items.map((item) => {
       const proportion = normalTotal > 0 ? item.originalTotal / normalTotal : 0;
       const itemDiscount = discount * proportion;
       const finalPrice = item.originalTotal - itemDiscount;
-      const isBundle = bundleCount > 0 && item.quantity >= 1;
+      const isBundle = bundleCount > 0 && item.quantity >= bundleQty;
 
       return {
         ...item,
         lineTotal: finalPrice,
         isBundle: isBundle,
         bundleDiscount: itemDiscount,
-        bundleType: isBundle
-          ? `${item.product.category} ${item.product.type} (${bundleQty}-for-${bundlePrice})`
-          : null,
+        bundleType: isBundle ? bundleName : null,
         customPrice: false,
       };
     });
@@ -1054,94 +1052,52 @@ function applyCartBundles(cartItems) {
     };
   }
 
-  // Calculate bundles for each category
-  const greenhousePrerollResult = calculateBundle(greenhousePrerolls, 3, 150);
-  const greenhouseFlowerResult = calculateBundle(greenhouseFlowers, 5, 250);
-  const indoorPrerollResult = calculateBundle(indoorPrerolls, 3, 300);
-  const indoorFlowerResult = calculateBundle(indoorFlowers, 5, 400);
+  const greenhousePrerollResult = calculateBundle(
+    greenhousePrerolls,
+    3,
+    150,
+    "Greenhouse Pre-roll (3-for-150)",
+  );
+  const greenhouseFlowerResult = calculateBundle(
+    greenhouseFlowers,
+    5,
+    250,
+    "Greenhouse Flower (5-for-250)",
+  );
+  const indoorPrerollResult = calculateBundle(
+    indoorPrerolls,
+    3,
+    300,
+    "Indoor Pre-roll (3-for-300)",
+  );
+  const indoorFlowerResult = calculateBundle(
+    indoorFlowers,
+    5,
+    400,
+    "Indoor Flower (5-for-400)",
+  );
 
-  // Process custom price items (no bundle, keep their custom price)
-  const customItems = otherItems
-    .filter((item) => item.isCustomPrice)
-    .map((item) => ({
-      ...item,
-      lineTotal: item.customPrice, // Use the custom price
-      isBundle: false,
-      bundleDiscount: 0,
-      bundleType: null,
-      customPrice: true,
-    }));
-
-  // Process other items (no bundle, regular price)
-  const regularOtherItems = otherItems
-    .filter((item) => !item.isCustomPrice)
-    .map((item) => ({
+  const resultItems = [
+    ...processedItems,
+    ...greenhousePrerollResult.items,
+    ...greenhouseFlowerResult.items,
+    ...indoorPrerollResult.items,
+    ...indoorFlowerResult.items,
+    ...otherItems.map((item) => ({
       ...item,
       lineTotal: item.originalTotal,
       isBundle: false,
       bundleDiscount: 0,
       bundleType: null,
-      customPrice: false,
-    }));
-
-  // Combine all results
-  const resultItems = [
-    ...greenhousePrerollResult.items,
-    ...greenhouseFlowerResult.items,
-    ...indoorPrerollResult.items,
-    ...indoorFlowerResult.items,
-    ...customItems,
-    ...regularOtherItems,
+    })),
   ];
 
-  // Calculate final totals
-  const subtotal =
-    greenhousePrerollResult.normalTotal +
-    greenhouseFlowerResult.normalTotal +
-    indoorPrerollResult.normalTotal +
-    indoorFlowerResult.normalTotal +
-    otherItems.reduce((sum, item) => sum + item.originalTotal, 0);
-
-  const total =
-    greenhousePrerollResult.bundledTotal +
-    greenhouseFlowerResult.bundledTotal +
-    indoorPrerollResult.bundledTotal +
-    indoorFlowerResult.bundledTotal +
-    customItems.reduce((sum, item) => sum + item.customPrice, 0) +
-    regularOtherItems.reduce((sum, item) => sum + item.originalTotal, 0);
-
-  const discount =
-    greenhousePrerollResult.discount +
-    greenhouseFlowerResult.discount +
-    indoorPrerollResult.discount +
-    indoorFlowerResult.discount;
-
-  console.log("Bundle Applied:", {
-    greenhousePrerolls: {
-      units: greenhousePrerollResult.totalUnits,
-      bundles: greenhousePrerollResult.bundleCount,
-      discount: greenhousePrerollResult.discount,
-    },
-    greenhouseFlowers: {
-      units: greenhouseFlowerResult.totalUnits,
-      bundles: greenhouseFlowerResult.bundleCount,
-      discount: greenhouseFlowerResult.discount,
-    },
-    indoorPrerolls: {
-      units: indoorPrerollResult.totalUnits,
-      bundles: indoorPrerollResult.bundleCount,
-      discount: indoorPrerollResult.discount,
-    },
-    indoorFlowers: {
-      units: indoorFlowerResult.totalUnits,
-      bundles: indoorFlowerResult.bundleCount,
-      discount: indoorFlowerResult.discount,
-    },
-    customItems: customItems.length,
-    subtotal,
-    total,
-    discount,
-  });
+  const subtotal = resultItems.reduce(
+    (sum, item) => sum + item.originalTotal,
+    0,
+  );
+  const total = resultItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  const discount = subtotal - total;
 
   return {
     items: resultItems,
@@ -1157,6 +1113,8 @@ function applyCartBundles(cartItems) {
       indoorPrerollRemaining: indoorPrerollResult.remaining,
       indoorFlowerBundles: indoorFlowerResult.bundleCount,
       indoorFlowerRemaining: indoorFlowerResult.remaining,
+      processedItemBundles: processedItems.filter((item) => item.isBundle)
+        .length,
     },
   };
 }
@@ -1164,17 +1122,14 @@ function applyCartBundles(cartItems) {
 // ----- LOAD DATA FROM DATABASE -----
 async function loadData() {
   try {
-    // Load products
     const dbProducts = await database.getAllProducts();
     products = dbProducts.map(normalizeProduct).filter(Boolean);
     console.log(`Loaded ${products.length} products`);
 
-    // Load transactions (new sales system)
     try {
       transactions = await database.getAllTransactions();
       console.log(`Loaded ${transactions.length} transactions`);
 
-      // Convert to sales format for backward compatibility
       sales = [];
       transactions.forEach((tx) => {
         tx.items.forEach((item) => {
@@ -1245,29 +1200,50 @@ function renderProducts() {
 
   if (!filtered.length) {
     grid.innerHTML =
-      '<div class="empty-state">No items match your search.</div>';
+      '<div class="empty-state"><div class="empty-icon">🔍</div><h4>No products found</h4><p>Try adjusting your search</p></div>';
     return;
   }
 
   grid.innerHTML = filtered
     .map(
       (p) => `
-    <button type="button" class="product-card" data-id="${p.id}">
-      <div class="d-flex justify-content-between align-items-start">
-        <strong>${p.name}</strong>
+    <div class="product-card" data-id="${p.id}">
+      <div class="product-header">
+        <span class="product-name">${p.name}</span>
         <span class="product-badge ${getCategoryClass(p.category)}">${p.category}</span>
       </div>
-      <p class="meta mb-2 mt-2"><span class="product-badge ${getTypeClass(p.type)}">${p.type}</span></p>
-      <div class="price">${currency(p.price)}</div>
-      <p class="meta small mb-2">${p.stock > 0 ? `${p.stock} in stock` : "Out of stock"}</p>
-      <p class="meta small">${p.bundles?.length ? `Bundles: ${p.bundles.map((b) => `${b.qty} for ${currency(b.price)}`).join(" · ")}` : "Regular pricing"}</p>
-    </button>
+      <div>
+        <span class="product-badge ${getTypeClass(p.type)}">${p.type}</span>
+      </div>
+      <div class="product-price">${currency(p.price)}</div>
+      <div class="product-stock ${p.stock < STOCK_THRESHOLDS.LOW ? "low" : ""}">
+        ${p.stock > 0 ? `${p.stock} in stock` : "Out of stock"}
+      </div>
+      ${p.bundles?.length ? `<div class="product-bundles">${p.bundles.map((b) => `${b.qty}×${currency(b.price)}`).join(" · ")}</div>` : ""}
+      <div class="product-quick-actions">
+        <button class="qty-btn-sm" data-add="1">+1</button>
+        <button class="qty-btn-sm" data-add="3">+3</button>
+        <button class="qty-btn-sm" data-add="5">+5</button>
+      </div>
+    </div>
   `,
     )
     .join("");
 
-  grid.querySelectorAll("[data-id]").forEach((btn) => {
-    btn.addEventListener("click", () => addToCart(btn.dataset.id, 1));
+  grid.querySelectorAll(".product-card").forEach((card) => {
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".product-quick-actions")) return;
+      addToCart(card.dataset.id, 1);
+    });
+  });
+
+  grid.querySelectorAll("[data-add]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const card = btn.closest(".product-card");
+      const qty = parseInt(btn.dataset.add);
+      addToCart(card.dataset.id, qty);
+    });
   });
 }
 
@@ -1276,7 +1252,6 @@ function renderCart() {
   const subtotalEl = document.getElementById("cartSubtotal");
   const countEl = document.getElementById("cartCount");
 
-  // Check if Uberzol is active and has a manual value
   const paymentMethod = document.getElementById("paymentMethod")?.value;
   const isUberzol = paymentMethod === "Uberzol";
   const uberzolInput = document.getElementById("uberzolSubtotalInput");
@@ -1287,7 +1262,8 @@ function renderCart() {
   }
 
   if (!cart.length) {
-    list.innerHTML = '<div class="empty-state">Your cart is empty.</div>';
+    list.innerHTML =
+      '<div class="empty-state"><div class="empty-icon">🛒</div><h4>Your cart is empty</h4><p>Browse products and add items to get started</p></div>';
     subtotalEl.textContent = currency(0);
     countEl.textContent = "0 items";
     return;
@@ -1308,41 +1284,35 @@ function renderCart() {
 
       return `
       <div class="cart-item" data-product-id="${product.id}">
-        <div class="d-flex justify-content-between align-items-start">
-          <div>
-            <strong>${product.name}</strong>
-            <div class="meta small">${product.bundles?.length ? "Bundle pricing available" : "Standard pricing"}</div>
-          </div>
-          <button class="btn btn-link text-danger p-0" data-remove="${product.id}">Remove</button>
+        <div class="item-info">
+          <span class="item-name">${product.name}</span>
+          <button class="item-remove" data-remove="${product.id}"><i class="fas fa-times"></i></button>
         </div>
         <div class="qty-controls">
           <button class="qty-btn" data-update="${product.id}" data-delta="-1">−</button>
           <span class="fw-semibold">${item.quantity}</span>
           <button class="qty-btn" data-update="${product.id}" data-delta="1">+</button>
         </div>
-        <div class="d-flex justify-content-between mt-2 align-items-center">
-          <span class="small text-muted">${currency(product.price)} each</span>
-          <div class="price-edit-group">
-            <span class="currency-symbol">R</span>
-            <input type="number" 
-                   class="cart-price-input" 
-                   data-product-id="${product.id}"
-                   step="0.01" 
-                   min="0"
-                   value="${currency(currentPrice)}"
-                   placeholder="0.00"
-            />
-            <button class="btn btn-link text-primary p-0 reset-price-btn" data-product-id="${product.id}" title="Reset to default price">
-              <i class="fas fa-undo-alt"></i>
-            </button>
-          </div>
+        <div class="item-price-edit">
+          <span class="text-muted small">R${currency(product.price)} each</span>
+          <span class="currency-symbol ms-2">R</span>
+          <input type="number" 
+                 class="price-edit-input" 
+                 data-product-id="${product.id}"
+                 step="0.01" 
+                 min="0"
+                 value="${currency(currentPrice)}"
+                 placeholder="0.00"
+          />
+          <button class="reset-price-btn" data-product-id="${product.id}" title="Reset price">
+            <i class="fas fa-undo-alt"></i>
+          </button>
         </div>
       </div>
     `;
     })
     .join("");
 
-  // Use Uberzol value if set, otherwise use calculated subtotal
   if (
     isUberzol &&
     uberzolValue !== null &&
@@ -1350,10 +1320,10 @@ function renderCart() {
     uberzolValue >= 0
   ) {
     subtotalEl.textContent = currency(uberzolValue);
-    subtotalEl.style.color = "#7c3aed";
+    subtotalEl.className = "total-amount uberzol";
   } else {
     subtotalEl.textContent = currency(subtotal);
-    subtotalEl.style.color = "";
+    subtotalEl.className = "total-amount";
   }
 
   countEl.textContent = `${cart.reduce((s, i) => s + i.quantity, 0)} items`;
@@ -1376,17 +1346,12 @@ function renderCart() {
           cart = cart.filter((i) => String(i.productId) !== id);
         } else {
           const product = getProductById(id);
-          if (product) {
-            const defaultPrice = calculatePrice(product, item.quantity);
-            if (item.customPrice !== undefined) {
-              const oldQuantity = item.quantity - delta;
-              const oldPrice = item.customPrice;
-              if (oldQuantity > 0) {
-                const perUnitPrice = oldPrice / oldQuantity;
-                item.customPrice = perUnitPrice * item.quantity;
-              } else {
-                item.customPrice = defaultPrice;
-              }
+          if (product && item.customPrice !== undefined) {
+            const oldQuantity = item.quantity - delta;
+            const oldPrice = item.customPrice;
+            if (oldQuantity > 0) {
+              const perUnitPrice = oldPrice / oldQuantity;
+              item.customPrice = perUnitPrice * item.quantity;
             }
           }
         }
@@ -1395,7 +1360,7 @@ function renderCart() {
     });
   });
 
-  list.querySelectorAll(".cart-price-input").forEach((input) => {
+  list.querySelectorAll(".price-edit-input").forEach((input) => {
     input.addEventListener("input", function () {
       const productId = this.dataset.productId;
       const value = parseFloat(this.value);
@@ -1415,15 +1380,13 @@ function renderCart() {
     btn.addEventListener("click", function () {
       const productId = this.dataset.productId;
       const item = cart.find((i) => String(i.productId) === productId);
-      const product = getProductById(productId);
-      if (item && product) {
+      if (item) {
         delete item.customPrice;
         renderCart();
       }
     });
   });
 
-  // Update Uberzol subtotal if visible
   const uberzolGroup = document.getElementById("uberzolSubtotalGroup");
   if (uberzolGroup && uberzolGroup.style.display !== "none") {
     updateUberzolSubtotal();
@@ -1431,17 +1394,7 @@ function renderCart() {
 }
 
 function updateCartSubtotal() {
-  let subtotal = 0;
-  cart.forEach((item) => {
-    const product = getProductById(item.productId);
-    if (product) {
-      const price =
-        item.customPrice !== undefined
-          ? item.customPrice
-          : calculatePrice(product, item.quantity);
-      subtotal += price;
-    }
-  });
+  const subtotal = CartCalculator.calculateSubtotal(cart);
   document.getElementById("cartSubtotal").textContent = currency(subtotal);
 }
 
@@ -1450,19 +1403,20 @@ function renderInventoryTable() {
   tbody.innerHTML = products
     .map((p) => {
       let status = '<span class="stock-good">In stock</span>';
-      if (p.stock < 5) status = '<span class="stock-low">Low stock</span>';
-      else if (p.stock < 15)
+      if (p.stock < STOCK_THRESHOLDS.LOW)
+        status = '<span class="stock-low">Low stock</span>';
+      else if (p.stock < STOCK_THRESHOLDS.WARNING)
         status = '<span class="stock-medium">Running low</span>';
       return `
       <tr>
-        <td><strong>${p.name}</strong><div class="meta small"><span class="product-badge ${getCategoryClass(p.category)}">${p.category}</span> <span class="product-badge ${getTypeClass(p.type)}">${p.type}</span></div></td>
+        <td><strong>${p.name}</strong><div class="text-muted small"><span class="product-badge ${getCategoryClass(p.category)}">${p.category}</span> <span class="product-badge ${getTypeClass(p.type)}">${p.type}</span></div></td>
         <td>${currency(p.price)}</td>
         <td>${p.stock}</td>
         <td>${status}</td>
         <td>
           <div class="d-flex gap-2">
             <button class="btn btn-outline-secondary btn-sm" data-edit="${p.id}">Edit</button>
-            <button class="btn btn-outline-danger btn-sm" data-delete="${p.id}">Delete</button>
+            <button class="btn btn-danger btn-sm" data-delete="${p.id}">Delete</button>
           </div>
         </td>
       </tr>
@@ -1483,10 +1437,9 @@ function renderSalesHistory() {
   const filter = document.getElementById("salesPaymentFilter").value;
   const search = document.getElementById("salesSearch").value.toLowerCase();
 
-  // Check if transactions exists and has data
   if (!transactions || transactions.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="6"><div class="empty-state">No transactions recorded yet.</div></td></tr>';
+      '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📦</div><h4>No transactions yet</h4><p>Start making sales to see your history here</p></div></td></tr>';
     return;
   }
 
@@ -1508,92 +1461,64 @@ function renderSalesHistory() {
     .slice()
     .reverse()
     .map((tx) => {
-      // Build items summary with price comparison for each item
+      // In renderSalesHistory, where the item summary is built
       const itemsSummary = tx.items
         .map((item) => {
-          // ============================================
-          // THIS IS THE CORRECT VERSION - USE ONLY THIS
-          // ============================================
           let tags = "";
           let priceDisplay = "";
 
-          // Check for custom price first
+          const originalTotal = item.unitPrice * item.quantity;
+          const paidPrice = item.lineTotal;
+          const priceDiff = originalTotal - paidPrice;
+
+          // ✅ Check if this item has a custom price
           if (item.customPrice) {
             tags += " ✏️";
-            const originalPrice = item.unitPrice * item.quantity;
-            const paidPrice = item.lineTotal;
-            if (paidPrice !== originalPrice) {
-              const diff = originalPrice - paidPrice;
-              const isDiscount = diff > 0;
+
+            if (paidPrice !== originalTotal) {
+              const isDiscount = priceDiff > 0;
+              const diffAmount = Math.abs(priceDiff);
+
               if (isDiscount) {
                 priceDisplay = `
-                  <span class="price-strikethrough">${currency(originalPrice)}</span>
-                  <span class="text-success fw-bold">${currency(paidPrice)}</span>
-                  <span class="text-success small">(-${currency(Math.abs(diff))}) ✏️</span>
-                `;
+            <span class="price-strikethrough">${currency(originalTotal)}</span>
+            <span class="text-success fw-bold">${currency(paidPrice)}</span>
+            <span class="text-success small">(-${currency(diffAmount)})</span>
+          `;
               } else {
                 priceDisplay = `
-                  <span class="price-strikethrough">${currency(originalPrice)}</span>
-                  <span class="text-warning fw-bold">${currency(paidPrice)}</span>
-                  <span class="text-warning small">(+${currency(Math.abs(diff))}) ✏️</span>
-                `;
+            <span class="price-strikethrough">${currency(originalTotal)}</span>
+            <span class="text-warning fw-bold">${currency(paidPrice)}</span>
+            <span class="text-warning small">(+${currency(diffAmount)})</span>
+          `;
               }
             } else {
-              priceDisplay = `<span>${currency(paidPrice)} ✏️</span>`;
+              // Price edited but same as original
+              priceDisplay = `<span>${currency(paidPrice)}</span>`;
             }
           } else if (item.isBundle) {
-            // Check bundle type
-            if (item.bundleType) {
-              if (
-                item.bundleType.includes("Greenhouse") &&
-                item.bundleType.includes("Pre-roll")
-              ) {
-                tags += " 🌿 (3-for-150)";
-              } else if (
-                item.bundleType.includes("Greenhouse") &&
-                item.bundleType.includes("Flower")
-              ) {
-                tags += " 🌺 (5-for-250)";
-              } else if (
-                item.bundleType.includes("Indoor") &&
-                item.bundleType.includes("Pre-roll")
-              ) {
-                tags += " 🏠 (3-for-300)";
-              } else if (
-                item.bundleType.includes("Indoor") &&
-                item.bundleType.includes("Flower")
-              ) {
-                tags += " 🏠 (5-for-400)";
-              } else {
-                tags += " 🎯";
-              }
-            } else {
-              tags += " 🎯";
-            }
-            // Show bundle price
-            const originalPrice = item.unitPrice * item.quantity;
-            const paidPrice = item.lineTotal;
-            if (paidPrice !== originalPrice) {
-              const diff = originalPrice - paidPrice;
+            // Bundle pricing logic (keep as is)
+            tags += " 🎯";
+            if (paidPrice !== originalTotal) {
+              const diffAmount = Math.abs(priceDiff);
               priceDisplay = `
-                <span class="price-strikethrough">${currency(originalPrice)}</span>
-                <span class="text-success fw-bold">${currency(paidPrice)}</span>
-                <span class="text-success small">(-${currency(Math.abs(diff))})</span>
-              `;
+          <span class="price-strikethrough">${currency(originalTotal)}</span>
+          <span class="text-success fw-bold">${currency(paidPrice)}</span>
+          <span class="text-success small">(-${currency(diffAmount)})</span>
+        `;
             } else {
               priceDisplay = `<span>${currency(paidPrice)}</span>`;
             }
           } else {
-            // Regular price (no bundle, no custom price)
-            priceDisplay = `<span>${currency(item.lineTotal || item.originalTotal)}</span>`;
+            // Regular price
+            priceDisplay = `<span>${currency(paidPrice)}</span>`;
           }
-          // ============================================
-          // END OF CORRECT VERSION
-          // ============================================
 
           return `${item.quantity}x ${item.productName}${tags} → ${priceDisplay}`;
         })
         .join(", ");
+
+      const totalDiscount = tx.discount || 0;
 
       const badgeClass =
         tx.payment === "Cash"
@@ -1604,37 +1529,42 @@ function renderSalesHistory() {
               ? "badge-uberzol"
               : "badge-eft";
 
+      const discountedItems = tx.items.filter((item) => {
+        const originalTotal = item.unitPrice * item.quantity;
+        return item.lineTotal < originalTotal;
+      }).length;
+
       return `
       <tr>
         <td>
           ${new Date(tx.date).toLocaleString()}
-          ${tx.note ? `<br><small class="text-muted">${tx.note}</small>` : ""}
+          ${tx.note ? `<br><span class="text-muted small">${tx.note}</span>` : ""}
         </td>
         <td>
           <strong>${tx.items.length} items</strong>
           <br>
-          <small class="text-muted">${itemsSummary}</small>
-          ${tx.discount > 0 ? `<br><small class="text-success">💸 Total Discount: ${currency(tx.discount)}</small>` : ""}
+          <span class="text-muted small">${itemsSummary}</span>
+          ${totalDiscount > 0 ? `<br><span class="text-success fw-bold small">💸 Discount: ${currency(totalDiscount)} (${discountedItems} item${discountedItems > 1 ? "s" : ""})</span>` : ""}
         </td>
         <td>
           <span class="badge bg-secondary">${tx.itemCount || tx.items.length}</span>
           <br>
-          <small class="text-muted">${tx.items.reduce((sum, i) => sum + i.quantity, 0)} units</small>
+          <span class="text-muted small">${tx.items.reduce((sum, i) => sum + i.quantity, 0)} units</span>
         </td>
-        <td><span class="${badgeClass}">${tx.payment}</span></td>
+        <td><span class="badge-payment ${badgeClass}">${tx.payment}</span></td>
         <td>
           <strong>${currency(tx.total)}</strong>
-          ${tx.discount > 0 ? `<br><small class="text-muted"><del>${currency(tx.subtotal)}</del></small>` : ""}
+          ${totalDiscount > 0 ? `<br><span class="text-muted small"><del>${currency(tx.subtotal)}</del></span>` : ""}
         </td>
         <td>
-          <button class="btn btn-sm edit-transaction-btn" 
+          <button class="btn btn-outline-secondary btn-sm edit-transaction-btn" 
                   data-transaction-id="${tx.id}" 
-                  title="Edit this transaction">
+                  title="Edit transaction">
             <i class="fas fa-edit"></i>
           </button>
-          <button class="btn btn-sm delete-transaction-btn" 
+          <button class="btn btn-danger btn-sm delete-transaction-btn" 
                   data-transaction-id="${tx.id}" 
-                  title="Delete this transaction">
+                  title="Delete transaction">
             <i class="fas fa-trash"></i>
           </button>
         </td>
@@ -1643,7 +1573,6 @@ function renderSalesHistory() {
     })
     .join("");
 
-  // Add event listeners for edit buttons
   document.querySelectorAll(".edit-transaction-btn").forEach((btn) => {
     btn.addEventListener("click", function () {
       const transactionId = this.dataset.transactionId;
@@ -1651,7 +1580,6 @@ function renderSalesHistory() {
     });
   });
 
-  // Add event listeners for delete buttons
   document.querySelectorAll(".delete-transaction-btn").forEach((btn) => {
     btn.addEventListener("click", function () {
       const transactionId = this.dataset.transactionId;
@@ -1661,10 +1589,8 @@ function renderSalesHistory() {
 }
 
 function renderDashboard() {
-  // Check if transactions exists
   if (!transactions) transactions = [];
 
-  // Calculate totals from transactions
   const totalRevenue = transactions.reduce(
     (sum, tx) => sum + (tx.total || 0),
     0,
@@ -1682,7 +1608,6 @@ function renderDashboard() {
     .filter((tx) => tx.payment === "Uberzol")
     .reduce((sum, tx) => sum + (tx.total || 0), 0);
 
-  // Get DOM elements and update them
   const revenueEl = document.getElementById("dashboardRevenue");
   const cashEl = document.getElementById("dashboardCash");
   const yocoEl = document.getElementById("dashboardYoco");
@@ -1695,12 +1620,11 @@ function renderDashboard() {
   if (eftEl) eftEl.textContent = currency(eft);
   if (uberzolEl) uberzolEl.textContent = currency(uberzol);
 
-  // Payment breakdown
   const breakdown = [
-    { label: "Cash", value: cash, total: totalRevenue },
-    { label: "Yoco", value: yoco, total: totalRevenue },
-    { label: "EFT", value: eft, total: totalRevenue },
-    { label: "Uberzol", value: uberzol, total: totalRevenue },
+    { label: "Cash", value: cash, total: totalRevenue, color: "#2563eb" },
+    { label: "Yoco", value: yoco, total: totalRevenue, color: "#7c3aed" },
+    { label: "EFT", value: eft, total: totalRevenue, color: "#f59e0b" },
+    { label: "Uberzol", value: uberzol, total: totalRevenue, color: "#8b5cf6" },
   ];
 
   const breakdownContainer = document.getElementById("paymentBreakdown");
@@ -1717,8 +1641,8 @@ function renderDashboard() {
             <strong>${entry.label}</strong>
             <span>${currency(entry.value)} · ${pct}%</span>
           </div>
-          <div class="bar">
-            <span style="width:${pct}%"></span>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${pct}%;background:${entry.color};"></div>
           </div>
         </div>
       `;
@@ -1726,7 +1650,6 @@ function renderDashboard() {
       .join("");
   }
 
-  // Top products (from transaction items)
   const productSales = {};
   transactions.forEach((tx) => {
     if (tx.items && tx.items.length > 0) {
@@ -1761,12 +1684,11 @@ function renderDashboard() {
               </div>`,
             )
             .join("")
-        : '<div class="empty-state">No contributions recorded yet.</div>';
+        : '<div class="empty-state"><div class="empty-icon">⭐</div><p>No product sales recorded yet</p></div>';
   }
 
-  // Stock alerts
   const low = products
-    .filter((p) => p.stock < 10)
+    .filter((p) => p.stock < STOCK_THRESHOLDS.WARNING)
     .sort((a, b) => a.stock - b.stock);
 
   const stockAlertsList = document.getElementById("stockAlertsList");
@@ -1777,14 +1699,13 @@ function renderDashboard() {
             (p) =>
               `<div class="d-flex justify-content-between py-2 border-bottom">
                 <span>${p.name}</span>
-                <strong>${p.stock} left</strong>
+                <strong class="${p.stock < STOCK_THRESHOLDS.LOW ? "text-danger" : "text-warning"}">${p.stock} left</strong>
               </div>`,
           )
           .join("")
-      : '<div class="empty-state">All items are comfortably stocked.</div>';
+      : '<div class="empty-state"><div class="empty-icon">✅</div><p>All items are comfortably stocked</p></div>';
   }
 
-  // Render daily revenue chart
   renderDailyRevenueChart();
 }
 
@@ -1801,7 +1722,6 @@ function renderDailyRevenueChart() {
     d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10);
 
-    // Sum totals from transactions on this day
     const total = transactions
       .filter((tx) => tx.date && tx.date.startsWith(key))
       .reduce((sum, tx) => sum + (tx.total || 0), 0);
@@ -1816,7 +1736,7 @@ function renderDailyRevenueChart() {
 
   if (totals.every((t) => t === 0)) {
     container.innerHTML =
-      '<div class="empty-state">No sales data for the last 7 days</div>';
+      '<div class="empty-state"><div class="empty-icon">📊</div><p>No sales data for the last 7 days</p></div>';
     return;
   }
 
@@ -1828,7 +1748,7 @@ function renderDailyRevenueChart() {
           return `
           <div class="daily-chart-bar-group">
             <div class="daily-chart-bar" style="height:${height}%">
-              <span class="daily-chart-value">${currency(v)}</span>
+              <span class="chart-value">${currency(v)}</span>
             </div>
             <div class="daily-chart-label">${labels[idx]}</div>
           </div>
@@ -1853,27 +1773,43 @@ function addToCart(productId, qty = 1) {
   const product = getProductById(productId);
   if (!product) return;
   if (product.stock < qty) {
-    alert(`Only ${product.stock} unit(s) of ${product.name} remain.`);
+    showToast(
+      "Stock Alert",
+      `Only ${product.stock} unit(s) of ${product.name} remain.`,
+      "warning",
+    );
     return;
   }
   const existing = cart.find((i) => String(i.productId) === String(productId));
   if (existing) existing.quantity += qty;
   else cart.push({ productId: String(productId), quantity: qty });
+
+  // Animation feedback
+  const card = document.querySelector(`.product-card[data-id="${productId}"]`);
+  if (card) {
+    card.classList.add("adding");
+    setTimeout(() => card.classList.remove("adding"), 400);
+  }
+
   renderCart();
+  showToast("Added", `${qty}x ${product.name} added to cart`, "success");
 }
 
 // ============================================
-// CHECKOUT FUNCTION (WITH CART-LEVEL BUNDLES)
+// CHECKOUT FUNCTION
 // ============================================
 async function checkout() {
   if (!cart.length) {
-    alert("Add at least one item to the cart first.");
+    showToast(
+      "Cart Empty",
+      "Add at least one item to the cart first.",
+      "warning",
+    );
     return;
   }
 
   const payment = document.getElementById("paymentMethod").value;
 
-  // Check if Uberzol is selected
   let uberzolTotal = null;
   if (payment === "Uberzol") {
     const input = document.getElementById("uberzolSubtotalInput");
@@ -1882,37 +1818,34 @@ async function checkout() {
       if (!isNaN(value) && value > 0) {
         uberzolTotal = value;
       } else {
-        alert("Please enter a valid Uberzol amount (greater than 0).");
+        showToast(
+          "Error",
+          "Please enter a valid Uberzol amount greater than 0.",
+          "error",
+        );
         return;
       }
     }
   }
 
-  // Apply cart-level bundles
   const bundleResult = applyCartBundles(cart);
   const { items, subtotal, total, discount, bundleInfo } = bundleResult;
 
-  console.log("Bundle Info:", bundleInfo);
-  console.log("Items after bundles:", items);
-
-  // For Uberzol, recalculate totals based on manual amount
   let finalTotal = total;
   let finalItems = items;
 
   if (payment === "Uberzol" && uberzolTotal !== null) {
-    // For Uberzol, distribute the total proportionally
     const proportionFactor = uberzolTotal / subtotal;
     finalItems = items.map((item) => ({
       ...item,
       lineTotal: item.lineTotal * proportionFactor,
       isBundle: item.isBundle,
-      bundleDiscount: 0, // No discount when using Uberzol
+      bundleDiscount: 0,
       bundleType: item.bundleType,
     }));
     finalTotal = uberzolTotal;
   }
 
-  // Reduce stock and prepare transaction items
   const transactionItems = [];
   let actualTotal = 0;
 
@@ -1920,16 +1853,17 @@ async function checkout() {
     const product = getProductById(item.productId);
     if (!product) continue;
 
-    // Check stock
     if (product.stock < item.quantity) {
-      alert(`Only ${product.stock} unit(s) of ${product.name} remain.`);
+      showToast(
+        "Stock Alert",
+        `Only ${product.stock} unit(s) of ${product.name} remain.`,
+        "error",
+      );
       return;
     }
 
-    // Reduce stock
     product.stock -= item.quantity;
 
-    // Add to transaction items
     transactionItems.push({
       productId: String(product.id),
       productName: product.name,
@@ -1944,10 +1878,8 @@ async function checkout() {
     actualTotal += item.lineTotal;
   }
 
-  // Calculate discounts for display
   const totalDiscount = subtotal - total + (payment === "Uberzol" ? 0 : 0);
 
-  // Create transaction
   const transaction = {
     payment: payment,
     subtotal: payment === "Uberzol" ? actualTotal : subtotal,
@@ -1958,26 +1890,30 @@ async function checkout() {
     note:
       payment === "Uberzol"
         ? `Uberzol total: ${currency(uberzolTotal)}`
-        : bundleInfo.greenhouseBundles > 0 || bundleInfo.indoorBundles > 0
-          ? `🌿 ${bundleInfo.greenhouseBundles}× Greenhouse bundles · 🏠 ${bundleInfo.indoorBundles}× Indoor bundles`
+        : bundleInfo.greenhousePrerollBundles > 0 ||
+            bundleInfo.indoorPrerollBundles > 0
+          ? `🌿 ${bundleInfo.greenhousePrerollBundles}× Greenhouse bundles · 🏠 ${bundleInfo.indoorPrerollBundles}× Indoor bundles`
           : null,
   };
 
-  console.log("Transaction:", transaction);
+  const validation = Validators.validateTransaction(transaction);
+  if (!validation.valid) {
+    showToast("Validation Error", validation.errors.join("\n"), "error");
+    return;
+  }
 
-  // Save transaction
-  await database.saveTransaction(transaction);
+  try {
+    await withRetry(() => database.saveTransaction(transaction));
+    await saveProducts();
 
-  // Update products
-  await saveProducts();
+    cart = [];
+    renderAll();
+    setSyncStatus("Transaction recorded!", "success");
 
-  // Clear cart and refresh
-  cart = [];
-  renderAll();
-  setSyncStatus("Transaction recorded!", "success");
-
-  // Show transaction summary
-  showTransactionSummary(transaction);
+    showTransactionSummary(transaction);
+  } catch (error) {
+    ErrorHandler.handle(error, "checkout");
+  }
 }
 
 function showTransactionSummary(transaction) {
@@ -1985,6 +1921,14 @@ function showTransactionSummary(transaction) {
     .map((item) => {
       let tags = "";
       let priceDisplay = "";
+
+      const originalPrice = item.unitPrice * item.quantity;
+      const paidPrice = item.lineTotal;
+      const diff = originalPrice - paidPrice;
+
+      const isDiscount = diff > 0;
+      const isMarkup = diff < 0;
+      const diffAmount = Math.abs(diff);
 
       if (item.isBundle) {
         if (item.bundleType === "Greenhouse (3-for-150)") {
@@ -1997,12 +1941,12 @@ function showTransactionSummary(transaction) {
       }
       if (item.customPrice) tags += " ✏️";
 
-      const originalPrice = item.unitPrice * item.quantity;
-      const paidPrice = item.lineTotal;
-
       if (paidPrice !== originalPrice) {
-        const diff = originalPrice - paidPrice;
-        priceDisplay = `~~${currency(originalPrice)}~~ → ${currency(paidPrice)} (Saved ${currency(diff)})`;
+        if (isDiscount) {
+          priceDisplay = `~~${currency(originalPrice)}~~ → ${currency(paidPrice)} (Saved ${currency(diffAmount)})`;
+        } else if (isMarkup) {
+          priceDisplay = `~~${currency(originalPrice)}~~ → ${currency(paidPrice)} (+${currency(diffAmount)})`;
+        }
       } else {
         priceDisplay = `${currency(paidPrice)}`;
       }
@@ -2011,7 +1955,30 @@ function showTransactionSummary(transaction) {
     })
     .join("\n");
 
-  const summary = `
+  const subtotal = transaction.items.reduce((sum, item) => {
+    return sum + item.unitPrice * item.quantity;
+  }, 0);
+
+  const total = transaction.items.reduce((sum, item) => {
+    return sum + item.lineTotal;
+  }, 0);
+
+  const discount = subtotal - total;
+
+  let discountMessage = "";
+  if (discount > 0) {
+    const discountPercent =
+      subtotal > 0 ? ((discount / subtotal) * 100).toFixed(1) : 0;
+    discountMessage = `\n💸 Discount: ${currency(discount)} (${discountPercent}% off)`;
+  }
+
+  showToast(
+    "✅ Transaction Complete!",
+    `Payment: ${transaction.payment} | Items: ${transaction.items.length} | Total: ${currency(total)}${discountMessage}`,
+    "success",
+  );
+
+  console.log(`
 📋 Transaction Summary
 ${"=".repeat(50)}
 Payment: ${transaction.payment}
@@ -2019,26 +1986,11 @@ Items: ${transaction.items.length}
 ${"-".repeat(50)}
 ${itemsList}
 ${"-".repeat(50)}
-Subtotal: ${currency(transaction.subtotal)}
-Discount: ${currency(transaction.discount)}
-Total: ${currency(transaction.total)}
+Subtotal: ${currency(subtotal)}
+Discount: ${currency(discount)}
+Total: ${currency(total)}
 ${"=".repeat(50)}
-`;
-
-  console.log(summary);
-
-  let discountMessage = "";
-  if (transaction.discount > 0) {
-    discountMessage = `\n💸 Discount: ${currency(transaction.discount)}`;
-  }
-
-  alert(
-    `✅ Transaction Complete!\n\n` +
-      `Payment: ${transaction.payment}\n` +
-      `Items: ${transaction.items.length}\n` +
-      `Total: ${currency(transaction.total)}${discountMessage}\n` +
-      `\nView details in console.`,
-  );
+`);
 }
 
 // ----- UBERZOL SUBTOTAL EDITING -----
@@ -2046,17 +1998,7 @@ function updateUberzolSubtotal() {
   const uberzolGroup = document.getElementById("uberzolSubtotalGroup");
   if (!uberzolGroup || uberzolGroup.style.display === "none") return;
 
-  let subtotal = 0;
-  cart.forEach((item) => {
-    const product = getProductById(item.productId);
-    if (product) {
-      const price =
-        item.customPrice !== undefined
-          ? item.customPrice
-          : calculatePrice(product, item.quantity);
-      subtotal += price;
-    }
-  });
+  const subtotal = CartCalculator.calculateSubtotal(cart);
 
   const input = document.getElementById("uberzolSubtotalInput");
   if (!input) return;
@@ -2069,7 +2011,7 @@ function updateUberzolSubtotal() {
   if (subtotalEl && input.value) {
     const uberzolAmount = parseFloat(input.value) || 0;
     subtotalEl.textContent = currency(uberzolAmount);
-    subtotalEl.style.color = "#7c3aed";
+    subtotalEl.className = "total-amount uberzol";
   }
 }
 
@@ -2077,17 +2019,7 @@ function resetUberzolSubtotal() {
   const input = document.getElementById("uberzolSubtotalInput");
   if (!input) return;
 
-  let subtotal = 0;
-  cart.forEach((item) => {
-    const product = getProductById(item.productId);
-    if (product) {
-      const price =
-        item.customPrice !== undefined
-          ? item.customPrice
-          : calculatePrice(product, item.quantity);
-      subtotal += price;
-    }
-  });
+  const subtotal = CartCalculator.calculateSubtotal(cart);
 
   input.value = subtotal.toFixed(2);
   input.dataset.userEdited = "false";
@@ -2095,7 +2027,7 @@ function resetUberzolSubtotal() {
   const subtotalEl = document.getElementById("cartSubtotal");
   if (subtotalEl) {
     subtotalEl.textContent = currency(subtotal);
-    subtotalEl.style.color = "";
+    subtotalEl.className = "total-amount";
   }
 
   setSyncStatus("Uberzol subtotal reset", "info");
@@ -2112,21 +2044,11 @@ function setupUberzolSubtotalListener() {
     const subtotalEl = document.getElementById("cartSubtotal");
     if (subtotalEl && !isNaN(value) && value >= 0) {
       subtotalEl.textContent = currency(value);
-      subtotalEl.style.color = "#7c3aed";
+      subtotalEl.className = "total-amount uberzol";
     } else if (subtotalEl) {
-      let calculatedSubtotal = 0;
-      cart.forEach((item) => {
-        const product = getProductById(item.productId);
-        if (product) {
-          const price =
-            item.customPrice !== undefined
-              ? item.customPrice
-              : calculatePrice(product, item.quantity);
-          calculatedSubtotal += price;
-        }
-      });
+      const calculatedSubtotal = CartCalculator.calculateSubtotal(cart);
       subtotalEl.textContent = currency(calculatedSubtotal);
-      subtotalEl.style.color = "";
+      subtotalEl.className = "total-amount";
     }
   });
 
@@ -2143,6 +2065,7 @@ async function deleteProduct(id) {
   products = products.filter((item) => String(item.id) !== String(id));
   await saveProducts();
   renderAll();
+  showToast("Deleted", `${p.name} removed from inventory`, "success");
 }
 
 function resetProductForm() {
@@ -2253,7 +2176,7 @@ async function saveProduct(event) {
   const bundles = getBundlesFromForm();
 
   if (!name || !category || !type || isNaN(price) || isNaN(stock)) {
-    alert("Please complete all item fields.");
+    showToast("Error", "Please complete all item fields.", "error");
     return;
   }
 
@@ -2283,6 +2206,7 @@ async function saveProduct(event) {
   await saveProducts();
   renderAll();
   resetProductForm();
+  showToast("Success", "Product saved successfully!", "success");
   setSyncStatus("Item saved!", "success");
 }
 
@@ -2311,9 +2235,10 @@ function exportSalesCsv() {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "contributions-export.csv";
+  link.download = `sales-export-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
+  showToast("Exported", "CSV file downloaded successfully!", "success");
 }
 
 // ----- VIEW SWITCHING -----
@@ -2360,9 +2285,104 @@ function handleLogin() {
   }
 }
 
+// ============================================
+// KEYBOARD SHORTCUTS
+// ============================================
+document.addEventListener("keydown", (e) => {
+  // Ctrl+1 -> POS view
+  if (e.ctrlKey && e.key === "1") {
+    e.preventDefault();
+    switchView("pos");
+  }
+  // Ctrl+2 -> Inventory
+  if (e.ctrlKey && e.key === "2") {
+    e.preventDefault();
+    switchView("inventory");
+  }
+  // Ctrl+3 -> Sales History
+  if (e.ctrlKey && e.key === "3") {
+    e.preventDefault();
+    switchView("sales");
+  }
+  // Ctrl+4 -> Dashboard
+  if (e.ctrlKey && e.key === "4") {
+    e.preventDefault();
+    switchView("dashboard");
+  }
+  // Ctrl+Enter -> Checkout
+  if (e.ctrlKey && e.key === "Enter") {
+    e.preventDefault();
+    checkout();
+  }
+  // Escape -> Close modals
+  if (e.key === "Escape") {
+    document
+      .querySelectorAll(".modal-overlay, .confirmation-modal-overlay")
+      .forEach((modal) => {
+        if (
+          modal.style.display !== "none" ||
+          modal.classList.contains("active")
+        ) {
+          modal.style.display = "none";
+          modal.classList.remove("active");
+        }
+      });
+  }
+});
+
+// ============================================
+// THEME TOGGLE
+// ============================================
+function setupThemeToggle() {
+  const toggle = document.getElementById("themeToggle");
+  if (!toggle) return;
+
+  // Check saved theme
+  const savedTheme = localStorage.getItem("bb_theme");
+  if (savedTheme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+    toggle.innerHTML = '<i class="fas fa-sun"></i>';
+  }
+
+  toggle.addEventListener("click", () => {
+    const currentTheme = document.documentElement.getAttribute("data-theme");
+    if (currentTheme === "dark") {
+      document.documentElement.removeAttribute("data-theme");
+      localStorage.setItem("bb_theme", "light");
+      toggle.innerHTML = '<i class="fas fa-moon"></i>';
+    } else {
+      document.documentElement.setAttribute("data-theme", "dark");
+      localStorage.setItem("bb_theme", "dark");
+      toggle.innerHTML = '<i class="fas fa-sun"></i>';
+    }
+  });
+}
+
+// ============================================
+// FILTER CHIPS
+// ============================================
+function setupFilterChips() {
+  const chips = document.querySelectorAll(".chip");
+  chips.forEach((chip) => {
+    chip.addEventListener("click", function () {
+      chips.forEach((c) => c.classList.remove("active"));
+      this.classList.add("active");
+
+      const filter = this.dataset.filter;
+      const searchInput = document.getElementById("productSearch");
+
+      if (filter === "all") {
+        searchInput.value = "";
+      } else {
+        searchInput.value = filter;
+      }
+      renderProducts();
+    });
+  });
+}
+
 // ----- EDIT TRANSACTION -----
 async function editTransaction(transactionId) {
-  // Find the transaction
   const transaction = transactions.find((tx) => tx.id === transactionId);
   if (!transaction) {
     showToast("Error", "Transaction not found.", "error");
@@ -2372,29 +2392,27 @@ async function editTransaction(transactionId) {
   const modal = document.getElementById("editTransactionModal");
   const content = document.getElementById("editTransactionContent");
 
-  // Build the edit form
   let itemsHtml = transaction.items
     .map((item, index) => {
       const originalPrice = item.unitPrice * item.quantity;
       return `
-      <div class="edit-item-row mb-2 p-2 border rounded" style="background: var(--bg-secondary);">
-        <div class="d-flex justify-content-between align-items-center">
-          <div class="fw-bold">${item.productName}</div>
-          <div class="d-flex align-items-center gap-2">
-            <span class="text-muted small">Qty:</span>
-            <input type="number" class="form-control form-control-sm edit-qty" 
-                   style="width: 60px;" value="${item.quantity}" min="1" data-index="${index}">
-            <span class="text-muted small">Price:</span>
-            <input type="number" class="form-control form-control-sm edit-price" 
-                   style="width: 100px;" value="${item.lineTotal}" step="0.01" min="0" data-index="${index}">
-            <button class="btn btn-outline-danger btn-sm remove-edit-item" data-index="${index}">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
+      <div class="edit-item-row mb-2" data-index="${index}">
+        <div class="edit-item-controls">
+          <span class="fw-bold" style="min-width:120px;">${item.productName}</span>
+          <input type="hidden" class="edit-product-id" value="${item.productId}">
+          <input type="hidden" class="edit-product-name" value="${item.productName}">
+          <span class="text-muted small">Qty:</span>
+          <input type="number" class="form-control qty-input edit-qty" 
+                 value="${item.quantity}" min="1" data-index="${index}">
+          <span class="text-muted small">Price:</span>
+          <input type="number" class="form-control price-input edit-price" 
+                 value="${item.lineTotal}" step="0.01" min="0" data-index="${index}">
+          <button class="edit-item-remove remove-edit-item" data-index="${index}">
+            <i class="fas fa-times"></i>
+          </button>
         </div>
-        <div class="small text-muted mt-1">
-          Original: ${currency(originalPrice)} | 
-          Unit: ${currency(item.unitPrice)} × ${item.quantity}
+        <div class="edit-item-original">
+          Original: ${currency(originalPrice)} | Unit: ${currency(item.unitPrice)} × ${item.quantity}
         </div>
       </div>
     `;
@@ -2404,8 +2422,8 @@ async function editTransaction(transactionId) {
   content.innerHTML = `
     <form id="editTransactionForm">
       <div class="mb-3">
-        <label class="form-label">Payment Method</label>
-        <select id="editPaymentMethod" class="form-select">
+        <label class="form-label fw-bold">Payment Method</label>
+        <select id="editPaymentMethod" class="form-control">
           <option value="Cash" ${transaction.payment === "Cash" ? "selected" : ""}>Cash</option>
           <option value="Yoco" ${transaction.payment === "Yoco" ? "selected" : ""}>Yoco</option>
           <option value="EFT" ${transaction.payment === "EFT" ? "selected" : ""}>EFT</option>
@@ -2414,17 +2432,17 @@ async function editTransaction(transactionId) {
       </div>
       
       <div class="mb-3">
-        <label class="form-label">Items</label>
+        <label class="form-label fw-bold">Items</label>
         <div id="editItemsContainer">
           ${itemsHtml}
         </div>
         <button type="button" id="addEditItemBtn" class="btn btn-outline-secondary btn-sm mt-2">
-          <i class="fas fa-plus"></i> Add Item
+          <i class="fas fa-plus me-1"></i> Add Item
         </button>
       </div>
       
       <div class="mb-3">
-        <label class="form-label">Note</label>
+        <label class="form-label fw-bold">Note</label>
         <input type="text" id="editNote" class="form-control" value="${transaction.note || ""}" placeholder="Optional note...">
       </div>
       
@@ -2446,10 +2464,7 @@ async function editTransaction(transactionId) {
     </form>
   `;
 
-  // Show modal
-  modal.style.display = "flex";
-
-  // Add event listeners for the edit form
+  modal.classList.add("active");
   setupEditFormListeners(transactionId);
 }
 
@@ -2457,29 +2472,24 @@ function setupEditFormListeners(transactionId) {
   const form = document.getElementById("editTransactionForm");
   const cancelBtn = document.getElementById("cancelEditBtn");
   const addItemBtn = document.getElementById("addEditItemBtn");
+  const modal = document.getElementById("editTransactionModal");
 
-  // Cancel button
   cancelBtn.addEventListener("click", () => {
-    document.getElementById("editTransactionModal").style.display = "none";
+    modal.classList.remove("active");
   });
 
-  // Close on overlay click
-  const modal = document.getElementById("editTransactionModal");
   modal.addEventListener("click", function (e) {
     if (e.target === this) {
-      this.style.display = "none";
+      this.classList.remove("active");
     }
   });
 
-  // Add item button
   addItemBtn.addEventListener("click", function () {
     addEditItemRow();
   });
 
-  // Remove item buttons
   document.querySelectorAll(".remove-edit-item").forEach((btn) => {
     btn.addEventListener("click", function () {
-      const index = parseInt(this.dataset.index);
       const rows = document.querySelectorAll(".edit-item-row");
       if (rows.length > 1) {
         this.closest(".edit-item-row").remove();
@@ -2494,12 +2504,10 @@ function setupEditFormListeners(transactionId) {
     });
   });
 
-  // Quantity and price input listeners
   document.querySelectorAll(".edit-qty, .edit-price").forEach((input) => {
     input.addEventListener("input", updateEditTotals);
   });
 
-  // Form submit
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     saveEditedTransaction(transactionId);
@@ -2511,34 +2519,47 @@ function addEditItemRow() {
   const index = document.querySelectorAll(".edit-item-row").length;
 
   const row = document.createElement("div");
-  row.className = "edit-item-row mb-2 p-2 border rounded";
-  row.style.background = "var(--bg-secondary)";
+  row.className = "edit-item-row mb-2";
+  row.dataset.index = index;
+
   row.innerHTML = `
-    <div class="d-flex justify-content-between align-items-center">
-      <div>
-        <input type="text" class="form-control form-control-sm edit-product-name" 
-               placeholder="Product name" style="width: 150px;" value="New Item">
-      </div>
-      <div class="d-flex align-items-center gap-2">
-        <span class="text-muted small">Qty:</span>
-        <input type="number" class="form-control form-control-sm edit-qty" 
-               style="width: 60px;" value="1" min="1" data-index="${index}">
-        <span class="text-muted small">Price:</span>
-        <input type="number" class="form-control form-control-sm edit-price" 
-               style="width: 100px;" value="0.00" step="0.01" min="0" data-index="${index}">
-        <button class="btn btn-outline-danger btn-sm remove-edit-item" data-index="${index}">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
+    <div class="edit-item-controls">
+      <select class="form-control edit-product-select" style="min-width:150px;">
+        <option value="">Select Product</option>
+        ${products.map((p) => `<option value="${p.id}">${p.name}</option>`).join("")}
+      </select>
+      <input type="hidden" class="edit-product-id" value="">
+      <input type="hidden" class="edit-product-name" value="">
+      <span class="text-muted small">Qty:</span>
+      <input type="number" class="form-control qty-input edit-qty" 
+             value="1" min="1" data-index="${index}">
+      <span class="text-muted small">Price:</span>
+      <input type="number" class="form-control price-input edit-price" 
+             value="0.00" step="0.01" min="0" data-index="${index}">
+      <button class="edit-item-remove remove-edit-item" data-index="${index}">
+        <i class="fas fa-times"></i>
+      </button>
     </div>
-    <div class="small text-muted mt-1">
-      New item added
-    </div>
+    <div class="edit-item-original">New item added</div>
   `;
+
+  const select = row.querySelector(".edit-product-select");
+  const hiddenId = row.querySelector(".edit-product-id");
+  const hiddenName = row.querySelector(".edit-product-name");
+
+  select.addEventListener("change", () => {
+    hiddenId.value = select.value;
+    const product = getProductById(select.value);
+    hiddenName.value = product ? product.name : "";
+    if (product) {
+      const priceInput = row.querySelector(".edit-price");
+      priceInput.value = product.price;
+      updateEditTotals();
+    }
+  });
 
   container.appendChild(row);
 
-  // Add event listeners
   row.querySelectorAll(".edit-qty, .edit-price").forEach((input) => {
     input.addEventListener("input", updateEditTotals);
   });
@@ -2565,14 +2586,11 @@ function updateEditTotals() {
   const rows = document.querySelectorAll(".edit-item-row");
 
   rows.forEach((row) => {
-    const qty = parseInt(row.querySelector(".edit-qty").value) || 0;
     const price = parseFloat(row.querySelector(".edit-price").value) || 0;
-    subtotal += qty * price;
+    subtotal += price;
   });
 
-  // Calculate discount (if any items were discounted)
-  const discount = 0; // You can add custom discount logic here
-
+  const discount = 0;
   const total = subtotal - discount;
 
   document.getElementById("editSubtotal").textContent = currency(subtotal);
@@ -2580,43 +2598,80 @@ function updateEditTotals() {
   document.getElementById("editTotal").textContent = currency(total);
 }
 
+// ============================================
+// SAVE EDITED TRANSACTION (FIXED)
+// ============================================
 async function saveEditedTransaction(transactionId) {
   try {
-    // Get the original transaction
     const originalTx = transactions.find((tx) => tx.id === transactionId);
     if (!originalTx) {
       showToast("Error", "Transaction not found.", "error");
       return;
     }
 
-    // Get edited data
     const payment = document.getElementById("editPaymentMethod").value;
     const note = document.getElementById("editNote").value;
     const rows = document.querySelectorAll(".edit-item-row");
 
+    if (rows.length === 0) {
+      showToast("Error", "Transaction must have at least one item.", "error");
+      return;
+    }
+
+    // FIRST: Restore original stock
+    for (const item of originalTx.items) {
+      const product = getProductById(item.productId);
+      if (product) {
+        product.stock += item.quantity;
+      }
+    }
+    await saveProducts();
+
+    // Process edited items
     const items = [];
     let subtotal = 0;
+    let total = 0;
 
-    rows.forEach((row) => {
+    for (const row of rows) {
+      const productId = row.querySelector(".edit-product-id")?.value || "";
       const productName =
-        row.querySelector(".edit-product-name")?.value || "Unknown Item";
+        row.querySelector(".edit-product-name")?.value ||
+        row.querySelector(".edit-product-select")?.value
+          ? row.querySelector(".edit-product-select")?.options?.[
+              row.querySelector(".edit-product-select")?.selectedIndex
+            ]?.text || "Unknown Item"
+          : "Unknown Item";
       const qty = parseInt(row.querySelector(".edit-qty").value) || 0;
       const lineTotal = parseFloat(row.querySelector(".edit-price").value) || 0;
       const unitPrice = qty > 0 ? lineTotal / qty : 0;
 
+      if (qty <= 0) {
+        showToast("Error", "Quantity must be greater than 0.", "error");
+        return;
+      }
+      if (lineTotal < 0) {
+        showToast("Error", "Price cannot be negative.", "error");
+        return;
+      }
+
+      const product = getProductById(productId);
+      const originalTotal = product ? product.price * qty : lineTotal;
+
       items.push({
-        productId: originalTx.items[0]?.productId || "unknown",
-        productName: productName,
+        productId: productId || originalTx.items[0]?.productId || "unknown",
+        productName: productName || "Unknown Item",
         quantity: qty,
         unitPrice: unitPrice,
         lineTotal: lineTotal,
         isBundle: false,
         bundleDiscount: 0,
+        bundleType: null,
         customPrice: true,
       });
 
-      subtotal += lineTotal;
-    });
+      subtotal += originalTotal;
+      total += lineTotal;
+    }
 
     // Delete old transaction and items
     await database.client
@@ -2627,31 +2682,48 @@ async function saveEditedTransaction(transactionId) {
     await database.client.from("transactions").delete().eq("id", transactionId);
 
     // Create new transaction with updated data
+    const totalDiscount = subtotal - total;
+
     const newTransaction = {
       payment: payment,
       subtotal: subtotal,
-      discount: 0,
-      total: subtotal,
+      discount: totalDiscount > 0 ? totalDiscount : 0,
+      total: total,
       items: items,
       date: originalTx.date,
       note: note || null,
     };
 
-    await database.saveTransaction(newTransaction);
+    const validation = Validators.validateTransaction(newTransaction);
+    if (!validation.valid) {
+      showToast("Validation Error", validation.errors.join("\n"), "error");
+      return;
+    }
+
+    await withRetry(() => database.saveTransaction(newTransaction));
+
+    // FINALLY: Deduct new stock
+    for (const item of items) {
+      const product = getProductById(item.productId);
+      if (product) {
+        product.stock -= item.quantity;
+      }
+    }
+    await saveProducts();
 
     // Reload data
     await loadData();
     renderAll();
 
-    document.getElementById("editTransactionModal").style.display = "none";
+    document.getElementById("editTransactionModal").classList.remove("active");
     showToast("Success", "Transaction updated successfully!", "success");
   } catch (error) {
     console.error("Error saving edited transaction:", error);
-    showToast("Error", "Failed to update transaction.", "error");
+    ErrorHandler.handle(error, "saveEditedTransaction");
   }
 }
 
-// ----- DELETE TRANSACTION -----
+// ----- DELETE TRANSACTION (FIXED) -----
 async function deleteTransaction(transactionId) {
   if (
     !confirm(
@@ -2662,101 +2734,37 @@ async function deleteTransaction(transactionId) {
   }
 
   try {
-    // Delete items first
-    await database.client
-      .from("transaction_items")
-      .delete()
-      .eq("transaction_id", transactionId);
+    const transaction = transactions.find((tx) => tx.id === transactionId);
 
-    // Delete transaction
-    await database.client.from("transactions").delete().eq("id", transactionId);
+    // Restore stock
+    if (transaction && transaction.items) {
+      for (const item of transaction.items) {
+        const product = getProductById(item.productId);
+        if (product) {
+          product.stock += item.quantity;
+        }
+      }
+      await saveProducts();
+    }
 
-    // Reload data
+    await withRetry(() => database.deleteTransaction(transactionId));
+
     await loadData();
     renderAll();
 
     showToast("Success", "Transaction deleted successfully!", "success");
   } catch (error) {
     console.error("Error deleting transaction:", error);
-    showToast("Error", "Failed to delete transaction.", "error");
+    ErrorHandler.handle(error, "deleteTransaction");
   }
 }
 
-async function initializeApp() {
-  setSyncStatus("Initializing database...", "info");
-
-  const dbInitialized = await initDatabase();
-  if (!dbInitialized) {
-    setSyncStatus(
-      "Failed to initialize database. Check console for errors.",
-      "danger",
-    );
-    return;
-  }
-
-  await loadData();
-  renderAll();
-  setSyncStatus("Connected", "success");
-}
-
-// ----- CLEAR DAY FUNCTION -----
+// ============================================
+// CLEAR DAY FUNCTION
+// ============================================
 function showClearDayModal() {
-  // Create modal if it doesn't exist
-  let modal = document.getElementById("clearDayModal");
-  if (!modal) {
-    modal = document.createElement("div");
-    modal.id = "clearDayModal";
-    modal.className = "confirmation-modal-overlay";
-    modal.innerHTML = `
-      <div class="confirmation-modal">
-        <h3 class="text-danger">
-          <i class="fas fa-exclamation-triangle me-2"></i>
-          Clear Today's Sales?
-        </h3>
-        <p class="text-muted">
-          This will permanently delete <strong>ALL</strong> sales records for today 
-          (${new Date().toLocaleDateString(undefined, {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}).
-        </p>
-        <p class="text-muted small">
-          <i class="fas fa-info-circle me-1"></i>
-          Product stock levels will <strong>NOT</strong> be restored.
-        </p>
-        <div class="modal-actions">
-          <button id="cancelClearDay" class="btn btn-outline-secondary">Cancel</button>
-          <button id="confirmClearDay" class="btn btn-danger">
-            <i class="fas fa-trash-alt me-2"></i>
-            Clear Today
-          </button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    // Add event listeners
-    modal
-      .querySelector("#cancelClearDay")
-      .addEventListener("click", hideClearDayModal);
-    modal
-      .querySelector("#confirmClearDay")
-      .addEventListener("click", confirmClearDay);
-
-    // Close on overlay click
-    modal.addEventListener("click", function (e) {
-      if (e.target === this) hideClearDayModal();
-    });
-
-    // Close on Escape key
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") hideClearDayModal();
-    });
-  }
-
-  modal.classList.add("active");
+  const modal = document.getElementById("clearDayModal");
+  if (modal) modal.classList.add("active");
 }
 
 function hideClearDayModal() {
@@ -2768,7 +2776,6 @@ async function confirmClearDay() {
   const today = new Date().toISOString().slice(0, 10);
 
   try {
-    // Filter transactions for today
     const todayTransactions = transactions.filter((tx) =>
       tx.date?.startsWith(today),
     );
@@ -2783,53 +2790,22 @@ async function confirmClearDay() {
       `Clearing ${todayTransactions.length} transactions for ${today}...`,
     );
 
-    // Show processing message
     showToast(
       "Processing...",
       `Deleting ${todayTransactions.length} transactions...`,
       "info",
     );
 
-    // Get the transaction IDs to delete
     const transactionIds = todayTransactions.map((tx) => tx.id);
 
-    // Delete from transaction_items first (due to foreign key constraint)
-    // Then delete from transactions
     let deletedCount = 0;
     let errorCount = 0;
 
     for (const txId of transactionIds) {
       try {
-        // First delete all items for this transaction
-        const { error: itemsError } = await database.client
-          .from("transaction_items")
-          .delete()
-          .eq("transaction_id", txId);
-
-        if (itemsError) {
-          console.error(
-            `Error deleting items for transaction ${txId}:`,
-            itemsError,
-          );
-          errorCount++;
-          continue;
-        }
-
-        // Then delete the transaction itself
-        const { error: txError } = await database.client
-          .from("transactions")
-          .delete()
-          .eq("id", txId);
-
-        if (txError) {
-          console.error(`Error deleting transaction ${txId}:`, txError);
-          errorCount++;
-          continue;
-        }
-
+        await withRetry(() => database.deleteTransaction(txId));
         deletedCount++;
 
-        // Update progress every 10 transactions
         if (deletedCount % 10 === 0) {
           showToast(
             "Processing...",
@@ -2843,10 +2819,8 @@ async function confirmClearDay() {
       }
     }
 
-    // Remove from local transactions array
     transactions = transactions.filter((tx) => !tx.date?.startsWith(today));
 
-    // Also update sales array for backward compatibility
     sales = [];
     transactions.forEach((tx) => {
       tx.items.forEach((item) => {
@@ -2866,27 +2840,18 @@ async function confirmClearDay() {
       });
     });
 
-    // Update UI
     renderAll();
 
-    // Show success message
     if (errorCount === 0) {
       showToast(
         "Day Cleared! 🧹",
-        `Successfully cleared ${deletedCount} transactions for ${new Date().toLocaleDateString(
-          undefined,
-          {
-            weekday: "long",
-            month: "short",
-            day: "numeric",
-          },
-        )}`,
+        `Successfully cleared ${deletedCount} transactions for ${new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`,
         "success",
       );
     } else {
       showToast(
         "Partial Clear ⚠️",
-        `Cleared ${deletedCount} transactions, but ${errorCount} failed to delete. Check console for details.`,
+        `Cleared ${deletedCount} transactions, but ${errorCount} failed.`,
         "warning",
       );
     }
@@ -2895,17 +2860,12 @@ async function confirmClearDay() {
     setSyncStatus(`Cleared ${deletedCount} transactions for today`, "success");
   } catch (error) {
     console.error("Error clearing day:", error);
-    showToast(
-      "Error",
-      "Failed to clear transactions. Please try again.",
-      "error",
-    );
+    ErrorHandler.handle(error, "clearDay");
   }
 }
 
 // ----- TOAST NOTIFICATION -----
 function showToast(title, message, type = "success") {
-  // Create toast if it doesn't exist
   let toast = document.getElementById("toastNotification");
   if (!toast) {
     toast = document.createElement("div");
@@ -2919,68 +2879,97 @@ function showToast(title, message, type = "success") {
         <div class="toast-title"></div>
         <div class="toast-message"></div>
       </div>
+      <button class="toast-close">&times;</button>
     `;
     document.body.appendChild(toast);
+
+    toast.querySelector(".toast-close").addEventListener("click", () => {
+      toast.classList.remove("show");
+    });
   }
 
-  // Set content
   const icon = toast.querySelector(".toast-icon i");
   const titleEl = toast.querySelector(".toast-title");
   const messageEl = toast.querySelector(".toast-message");
 
   toast.className = "toast-notification";
 
-  // Set icon and color based on type
   if (type === "error") {
     toast.classList.add("error");
     icon.className = "fas fa-exclamation-circle";
-    icon.style.color = "#e17055";
-    toast.style.borderLeftColor = "#e17055";
   } else if (type === "warning") {
     toast.classList.add("warning");
     icon.className = "fas fa-exclamation-triangle";
-    icon.style.color = "#fdcb6e";
-    toast.style.borderLeftColor = "#fdcb6e";
   } else if (type === "info") {
     toast.classList.add("info");
     icon.className = "fas fa-spinner fa-pulse";
-    icon.style.color = "#74b9ff";
-    toast.style.borderLeftColor = "#74b9ff";
   } else {
     toast.classList.add("success");
     icon.className = "fas fa-check-circle";
-    icon.style.color = "#00b894";
-    toast.style.borderLeftColor = "#00b894";
   }
 
   titleEl.textContent = title;
   messageEl.textContent = message;
 
-  // Show toast
   toast.classList.add("show");
 
-  // Auto hide after 5 seconds (or longer for info)
-  const duration = type === "info" ? 10000 : 5000;
+  const duration = type === "info" ? 8000 : 4000;
   clearTimeout(toast._timeout);
   toast._timeout = setTimeout(() => {
     toast.classList.remove("show");
   }, duration);
 
-  // Click to dismiss
-  toast.onclick = function () {
+  toast.onclick = function (e) {
+    if (e.target.closest(".toast-close")) return;
     this.classList.remove("show");
     clearTimeout(this._timeout);
   };
 }
 
+// ----- DEBOUNCE HELPER -----
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// ============================================
+// INITIALIZE APP
+// ============================================
+async function initializeApp() {
+  setSyncStatus("Initializing database...", "info");
+
+  const dbInitialized = await initDatabase();
+  if (!dbInitialized) {
+    setSyncStatus("Failed to connect to database. Please refresh.", "danger");
+    showToast(
+      "Connection Error",
+      "Failed to connect to database. Please check your internet connection.",
+      "error",
+    );
+    return;
+  }
+
+  await loadData();
+  renderAll();
+  setupThemeToggle();
+  setupFilterChips();
+  setupUberzolSubtotalListener();
+  setSyncStatus("Connected", "success");
+  showToast("Welcome", "🌿 Bud & Brush POS is ready!", "success");
+}
+
 // ----- INIT -----
 async function init() {
-  if (window.supabaseLoadPromise) {
-    try {
-      await window.supabaseLoadPromise;
-    } catch (error) {
-      console.warn("Supabase load issue:", error);
-    }
+  // Check if supabase is already loaded
+  if (window.supabase) {
+    window.supabaseJs = window.supabase;
   }
 
   if (checkAuth()) {
@@ -3005,12 +2994,13 @@ async function init() {
   });
 
   // POS
+  const debouncedSearch = debounce(() => renderProducts(), 300);
   document
     .getElementById("productSearch")
-    .addEventListener("input", renderProducts);
+    .addEventListener("input", debouncedSearch);
   document.getElementById("checkoutBtn").addEventListener("click", checkout);
 
-  // Payment method handler - Show/hide Uberzol subtotal editor
+  // Payment method handler
   document
     .getElementById("paymentMethod")
     .addEventListener("change", function () {
@@ -3019,48 +3009,22 @@ async function init() {
       const subtotalEl = document.getElementById("cartSubtotal");
 
       if (this.value === "Uberzol") {
-        uberzolGroup.style.display = "block";
+        uberzolGroup.classList.add("show");
         if (uberzolInput) {
-          let subtotal = 0;
-          cart.forEach((item) => {
-            const product = getProductById(item.productId);
-            if (product) {
-              const price =
-                item.customPrice !== undefined
-                  ? item.customPrice
-                  : calculatePrice(product, item.quantity);
-              subtotal += price;
-            }
-          });
+          const subtotal = CartCalculator.calculateSubtotal(cart);
           uberzolInput.value = subtotal.toFixed(2);
           uberzolInput.dataset.userEdited = "false";
         }
         if (subtotalEl) {
-          subtotalEl.style.color = "#7c3aed";
+          subtotalEl.className = "total-amount uberzol";
         }
-        document
-          .querySelector(".cart-summary")
-          ?.classList.add("uberzol-active");
       } else {
-        uberzolGroup.style.display = "none";
+        uberzolGroup.classList.remove("show");
         if (subtotalEl) {
-          let subtotal = 0;
-          cart.forEach((item) => {
-            const product = getProductById(item.productId);
-            if (product) {
-              const price =
-                item.customPrice !== undefined
-                  ? item.customPrice
-                  : calculatePrice(product, item.quantity);
-              subtotal += price;
-            }
-          });
+          const subtotal = CartCalculator.calculateSubtotal(cart);
           subtotalEl.textContent = currency(subtotal);
-          subtotalEl.style.color = "";
+          subtotalEl.className = "total-amount";
         }
-        document
-          .querySelector(".cart-summary")
-          ?.classList.remove("uberzol-active");
       }
     });
 
@@ -3093,15 +3057,22 @@ async function init() {
   document
     .getElementById("exportSalesBtn")
     .addEventListener("click", exportSalesCsv);
-}
 
-// Clear day button
-document
-  .getElementById("clearDayBtn")
-  .addEventListener("click", showClearDayModal);
+  // Clear day button
+  document
+    .getElementById("clearDayBtn")
+    .addEventListener("click", showClearDayModal);
+
+  document
+    .getElementById("cancelClearDay")
+    .addEventListener("click", hideClearDayModal);
+  document
+    .getElementById("confirmClearDay")
+    .addEventListener("click", confirmClearDay);
+}
 
 // Start the app when DOM is ready
 document.addEventListener("DOMContentLoaded", init);
 
-console.log("🌿 Bud & Brush application loaded with Supabase");
-console.log("✅ Data is stored remotely and accessible from anywhere");
+console.log("🌿 Bud & Brush POS loaded");
+console.log("📦 Data stored in Supabase");
