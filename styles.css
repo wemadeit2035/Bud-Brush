@@ -816,6 +816,44 @@ body {
   margin-left: 0.3rem;
 }
 
+/* Bundle Selector */
+.bundle-selector {
+  margin: 0.4rem 0;
+}
+
+.bundle-selector select {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  width: 100%;
+  max-width: 220px;
+  color: var(--text-primary);
+}
+
+.bundle-selector select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(26, 107, 106, 0.2);
+}
+
+.bundle-info .badge {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.bundle-price-indicator {
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: #d1fae5;
+  color: #065f46;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;

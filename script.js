@@ -594,6 +594,8 @@ class BudAndBrushSupabase {
 
   async saveTransaction(transaction) {
     try {
+      console.log("💾 Saving transaction with custom_price:", transaction);
+
       const { data: txData, error: txError } = await this.client
         .from("transactions")
         .insert({
@@ -610,6 +612,7 @@ class BudAndBrushSupabase {
 
       if (txError) throw txError;
 
+      // ✅ FIXED: Use 'items' not 'transactionItems'
       const items = transaction.items.map((item) => ({
         transaction_id: txData.id,
         product_id: item.productId,
@@ -619,20 +622,24 @@ class BudAndBrushSupabase {
         line_total: item.lineTotal,
         is_bundle: item.isBundle || false,
         bundle_discount: item.bundleDiscount || 0,
-        custom_price: item.customPrice || false, // ✅ This will now work
+        custom_price: item.customPrice === true,
       }));
 
-      console.log("📝 Saving items with custom_price:", items);
+      console.log("📝 Items being saved:", JSON.stringify(items, null, 2));
 
       const { error: itemsError } = await this.client
         .from("transaction_items")
         .insert(items);
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error("❌ Items error:", itemsError);
+        throw itemsError;
+      }
 
+      console.log("✅ Transaction saved successfully with ID:", txData.id);
       return txData.id;
     } catch (error) {
-      console.error("Error saving transaction:", error);
+      console.error("❌ Error saving transaction:", error);
       throw error;
     }
   }
@@ -665,7 +672,7 @@ class BudAndBrushSupabase {
           lineTotal: item.line_total,
           isBundle: item.is_bundle,
           bundleDiscount: item.bundle_discount,
-          customPrice: item.custom_price || false, // ✅ ADD THIS
+          customPrice: item.custom_price || false,
         });
       });
 
@@ -898,6 +905,329 @@ function calculatePrice(product, quantity) {
   return best;
 }
 
+// Get available bundles for a product based on category/type
+function getAvailableBundles(product, quantity) {
+  const bundles = [];
+
+  // ✅ Greenhouse Pre-roll Bundle - Show even for single items
+  if (product.category === "Greenhouse" && product.type === "Pre-roll") {
+    // Count total Greenhouse Pre-rolls in cart
+    const totalGreenhousePrerolls = cart
+      .filter((item) => {
+        const p = getProductById(item.productId);
+        return p && p.category === "Greenhouse" && p.type === "Pre-roll";
+      })
+      .reduce((sum, item) => sum + item.quantity, 0);
+
+    const currentQty = totalGreenhousePrerolls;
+    const needed = Math.max(0, 3 - currentQty);
+    const isActive = currentQty >= 3;
+
+    bundles.push({
+      id: "greenhouse-pr-3",
+      name: `🌿 Greenhouse PR Special (3 for R150)${needed > 0 ? ` - Add ${needed} more` : " - Applied!"}`,
+      price: 150,
+      qty: 3,
+      currentQty: currentQty,
+      needed: needed,
+      isActive: isActive,
+      type: "greenhouse-pr",
+      category: "Greenhouse",
+      productType: "Pre-roll",
+    });
+  }
+
+  // ✅ Greenhouse Flower Bundle
+  if (product.category === "Greenhouse" && product.type === "Flower") {
+    const totalGreenhouseFlowers = cart
+      .filter((item) => {
+        const p = getProductById(item.productId);
+        return p && p.category === "Greenhouse" && p.type === "Flower";
+      })
+      .reduce((sum, item) => sum + item.quantity, 0);
+
+    const currentQty = totalGreenhouseFlowers;
+    const needed = Math.max(0, 5 - currentQty);
+    const isActive = currentQty >= 5;
+
+    bundles.push({
+      id: "greenhouse-flower-5",
+      name: `🌿 Greenhouse Bud Special (5g for R250)${needed > 0 ? ` - Add ${needed} more` : " - Applied!"}`,
+      price: 250,
+      qty: 5,
+      currentQty: currentQty,
+      needed: needed,
+      isActive: isActive,
+      type: "greenhouse-flower",
+      category: "Greenhouse",
+      productType: "Flower",
+    });
+  }
+
+  // ✅ Indoor Pre-roll Bundle
+  if (
+    (product.category === "Indoor" ||
+      product.category === "Indoor Exotic" ||
+      product.category === "Indoor Hydro") &&
+    product.type === "Pre-roll"
+  ) {
+    const totalIndoorPrerolls = cart
+      .filter((item) => {
+        const p = getProductById(item.productId);
+        return (
+          p &&
+          (p.category === "Indoor" ||
+            p.category === "Indoor Exotic" ||
+            p.category === "Indoor Hydro") &&
+          p.type === "Pre-roll"
+        );
+      })
+      .reduce((sum, item) => sum + item.quantity, 0);
+
+    const currentQty = totalIndoorPrerolls;
+    const needed = Math.max(0, 3 - currentQty);
+    const isActive = currentQty >= 3;
+
+    bundles.push({
+      id: "indoor-pr-3",
+      name: `🏠 Indoor PR Special (3 for R300)${needed > 0 ? ` - Add ${needed} more` : " - Applied!"}`,
+      price: 300,
+      qty: 3,
+      currentQty: currentQty,
+      needed: needed,
+      isActive: isActive,
+      type: "indoor-pr",
+      category: "Indoor",
+      productType: "Pre-roll",
+    });
+  }
+
+  // ✅ Indoor Flower Bundle
+  if (
+    (product.category === "Indoor" ||
+      product.category === "Indoor Exotic" ||
+      product.category === "Indoor Hydro") &&
+    product.type === "Flower"
+  ) {
+    const totalIndoorFlowers = cart
+      .filter((item) => {
+        const p = getProductById(item.productId);
+        return (
+          p &&
+          (p.category === "Indoor" ||
+            p.category === "Indoor Exotic" ||
+            p.category === "Indoor Hydro") &&
+          p.type === "Flower"
+        );
+      })
+      .reduce((sum, item) => sum + item.quantity, 0);
+
+    const currentQty = totalIndoorFlowers;
+    const needed = Math.max(0, 5 - currentQty);
+    const isActive = currentQty >= 5;
+
+    bundles.push({
+      id: "indoor-flower-5",
+      name: `🏠 Indoor Bud Special (5g for R400)${needed > 0 ? ` - Add ${needed} more` : " - Applied!"}`,
+      price: 400,
+      qty: 5,
+      currentQty: currentQty,
+      needed: needed,
+      isActive: isActive,
+      type: "indoor-flower",
+      category: "Indoor",
+      productType: "Flower",
+    });
+  }
+
+  return bundles;
+}
+
+// ✅ Bundle change handler function
+function handleBundleChange(e) {
+  const select = e.target;
+  const productId = select.dataset.productId;
+  const bundleId = select.value;
+  const item = cart.find((i) => String(i.productId) === productId);
+
+  if (item) {
+    const product = getProductById(productId);
+    if (bundleId === "none") {
+      // Remove bundle
+      item.selectedBundle = null;
+      item.bundleApplied = null;
+      delete item.customPrice;
+    } else {
+      // Apply bundle
+      const availableBundles = getAvailableBundles(product, item.quantity);
+      const selectedBundle = availableBundles.find((b) => b.id === bundleId);
+      if (selectedBundle) {
+        item.selectedBundle = bundleId;
+        item.bundleApplied = {
+          id: selectedBundle.id,
+          name: selectedBundle.name,
+          price: selectedBundle.price,
+        };
+        // Set the bundle price
+        item.customPrice = selectedBundle.price;
+      }
+    }
+    renderCart();
+  }
+}
+
+// ✅ Bundle change handler function
+function handleBundleChange(e) {
+  const select = e.target;
+  const productId = select.dataset.productId;
+  const bundleId = select.value;
+  const item = cart.find((i) => String(i.productId) === productId);
+
+  if (item) {
+    const product = getProductById(productId);
+    if (bundleId === "none") {
+      // Remove bundle
+      item.selectedBundle = null;
+      item.bundleApplied = null;
+      delete item.customPrice;
+    } else {
+      // Apply bundle
+      const availableBundles = getAvailableBundles(product, item.quantity);
+      const selectedBundle = availableBundles.find((b) => b.id === bundleId);
+      if (selectedBundle) {
+        item.selectedBundle = bundleId;
+        item.bundleApplied = {
+          id: selectedBundle.id,
+          name: selectedBundle.name,
+          price: selectedBundle.price,
+        };
+        // Set the bundle price
+        item.customPrice = selectedBundle.price;
+      }
+    }
+    renderCart();
+  }
+}
+
+// ✅ ADD THIS FUNCTION RIGHT HERE - Handle add to bundle click
+function handleAddToBundle(e) {
+  const btn = e.target.closest(".add-to-bundle-btn");
+  if (!btn) return;
+
+  const productId = btn.dataset.productId;
+  const bundleType = btn.dataset.bundleType;
+  const addQty = parseInt(btn.dataset.addQty) || 1;
+
+  // Get the selected product from the dropdown
+  const container = btn.closest(".add-to-bundle-container");
+  const select = container.querySelector(".add-product-select");
+  const selectedProductId = select.value;
+
+  if (!selectedProductId) {
+    showToast(
+      "Select Product",
+      "Please select a strain to add to the bundle.",
+      "warning",
+    );
+    return;
+  }
+
+  // Check if product already exists in cart
+  const existingItem = cart.find(
+    (i) => String(i.productId) === selectedProductId,
+  );
+  const product = getProductById(selectedProductId);
+
+  // Check stock
+  if (product.stock < addQty) {
+    showToast(
+      "Stock Alert",
+      `Only ${product.stock} of ${product.name} available.`,
+      "error",
+    );
+    return;
+  }
+
+  if (existingItem) {
+    existingItem.quantity += addQty;
+  } else {
+    cart.push({
+      productId: selectedProductId,
+      quantity: addQty,
+    });
+  }
+
+  showToast(
+    "Added to Bundle",
+    `Added ${addQty}x ${product.name} to cart!`,
+    "success",
+  );
+
+  // Check if bundle is now complete
+  const bundleTypeMap = {
+    "greenhouse-pr": { category: "Greenhouse", type: "Pre-roll", neededQty: 3 },
+    "greenhouse-flower": {
+      category: "Greenhouse",
+      type: "Flower",
+      neededQty: 5,
+    },
+    "indoor-pr": { category: "Indoor", type: "Pre-roll", neededQty: 3 },
+    "indoor-flower": { category: "Indoor", type: "Flower", neededQty: 5 },
+  };
+
+  const bundleInfo = bundleTypeMap[bundleType];
+  if (bundleInfo) {
+    // Count total items of this category/type in cart
+    const totalItems = cart
+      .filter((item) => {
+        const p = getProductById(item.productId);
+        return (
+          p && p.category === bundleInfo.category && p.type === bundleInfo.type
+        );
+      })
+      .reduce((sum, item) => sum + item.quantity, 0);
+
+    if (totalItems >= bundleInfo.neededQty) {
+      // Auto-apply the bundle
+      const allBundles = getAvailableBundles(product, totalItems);
+      const activeBundle = allBundles.find(
+        (b) => b.isActive && b.type === bundleType,
+      );
+
+      if (activeBundle) {
+        // Apply bundle to all items of this category/type
+        cart.forEach((item) => {
+          const p = getProductById(item.productId);
+          if (
+            p &&
+            p.category === bundleInfo.category &&
+            p.type === bundleInfo.type
+          ) {
+            item.selectedBundle = activeBundle.id;
+            item.bundleApplied = {
+              id: activeBundle.id,
+              name: activeBundle.name,
+              price: activeBundle.price,
+            };
+            // Distribute the bundle price proportionally
+            const totalPrice = activeBundle.price;
+            const totalQty = totalItems;
+            item.customPrice = (item.quantity / totalQty) * totalPrice;
+          }
+        });
+
+        showToast(
+          "🎉 Bundle Applied!",
+          `You got the ${activeBundle.name}!`,
+          "success",
+        );
+      }
+    }
+  }
+
+  renderCart();
+}
+
 // ----- CART-LEVEL BUNDLE CALCULATION -----
 function applyCartBundles(cartItems) {
   const processedItems = [];
@@ -907,12 +1237,17 @@ function applyCartBundles(cartItems) {
     const product = getProductById(item.productId);
     if (!product) return;
 
-    if (item.customPrice !== undefined) {
+    // ✅ CHECK: Does this item have a custom price?
+    const hasCustomPrice = item.customPrice !== undefined;
+
+    if (hasCustomPrice) {
+      // Items with custom price go directly to remaining
       remainingItems.push({
         ...item,
         product: product,
         originalTotal: product.price * item.quantity,
         isCustomPrice: true,
+        customPrice: true,
       });
       return;
     }
@@ -931,7 +1266,7 @@ function applyCartBundles(cartItems) {
         isBundle: isBundle,
         bundleDiscount: bundleDiscount,
         bundleType: isBundle ? `Product Bundle (${product.name})` : null,
-        customPrice: item.customPrice !== undefined ? item.customPrice : false,
+        customPrice: false,
       });
     } else {
       remainingItems.push({
@@ -939,10 +1274,12 @@ function applyCartBundles(cartItems) {
         product: product,
         originalTotal: product.price * item.quantity,
         isCustomPrice: false,
+        customPrice: false,
       });
     }
   });
 
+  // Separate items by category/type for bundle calculation
   const greenhousePrerolls = [];
   const greenhouseFlowers = [];
   const indoorPrerolls = [];
@@ -979,6 +1316,7 @@ function applyCartBundles(cartItems) {
     }
   });
 
+  // Bundle calculation function with bundle name tracking
   function calculateBundle(items, bundleQty, bundlePrice, bundleName) {
     if (items.length === 0) {
       return {
@@ -989,6 +1327,7 @@ function applyCartBundles(cartItems) {
         normalTotal: 0,
         bundledTotal: 0,
         discount: 0,
+        bundleName: bundleName,
       };
     }
 
@@ -1049,34 +1388,40 @@ function applyCartBundles(cartItems) {
       normalTotal,
       bundledTotal,
       discount,
+      bundleName: bundleName,
     };
   }
 
+  // Calculate all bundles with their names
   const greenhousePrerollResult = calculateBundle(
     greenhousePrerolls,
     3,
     150,
-    "Greenhouse Pre-roll (3-for-150)",
+    "🌿 Greenhouse PR Special (3 for R150)",
   );
+
   const greenhouseFlowerResult = calculateBundle(
     greenhouseFlowers,
     5,
     250,
-    "Greenhouse Flower (5-for-250)",
+    "🌿 Greenhouse Bud Special (5g for R250)",
   );
+
   const indoorPrerollResult = calculateBundle(
     indoorPrerolls,
     3,
     300,
-    "Indoor Pre-roll (3-for-300)",
+    "🏠 Indoor PR Special (3 for R300)",
   );
+
   const indoorFlowerResult = calculateBundle(
     indoorFlowers,
     5,
     400,
-    "Indoor Flower (5-for-400)",
+    "🏠 Indoor Bud Special (5g for R400)",
   );
 
+  // ✅ IMPORTANT: Preserve customPrice for items that had it
   const resultItems = [
     ...processedItems,
     ...greenhousePrerollResult.items,
@@ -1089,6 +1434,7 @@ function applyCartBundles(cartItems) {
       isBundle: false,
       bundleDiscount: 0,
       bundleType: null,
+      customPrice: item.customPrice || false,
     })),
   ];
 
@@ -1099,23 +1445,46 @@ function applyCartBundles(cartItems) {
   const total = resultItems.reduce((sum, item) => sum + item.lineTotal, 0);
   const discount = subtotal - total;
 
+  // Build bundle info for the transaction note
+  const bundleInfo = {
+    greenhousePrerollBundles: greenhousePrerollResult.bundleCount,
+    greenhousePrerollRemaining: greenhousePrerollResult.remaining,
+    greenhouseFlowerBundles: greenhouseFlowerResult.bundleCount,
+    greenhouseFlowerRemaining: greenhouseFlowerResult.remaining,
+    indoorPrerollBundles: indoorPrerollResult.bundleCount,
+    indoorPrerollRemaining: indoorPrerollResult.remaining,
+    indoorFlowerBundles: indoorFlowerResult.bundleCount,
+    indoorFlowerRemaining: indoorFlowerResult.remaining,
+    processedItemBundles: processedItems.filter((item) => item.isBundle).length,
+    // ✅ Add bundle names for display
+    bundleNames: {
+      greenhousePreroll:
+        greenhousePrerollResult.bundleCount > 0
+          ? greenhousePrerollResult.bundleName
+          : null,
+      greenhouseFlower:
+        greenhouseFlowerResult.bundleCount > 0
+          ? greenhouseFlowerResult.bundleName
+          : null,
+      indoorPreroll:
+        indoorPrerollResult.bundleCount > 0
+          ? indoorPrerollResult.bundleName
+          : null,
+      indoorFlower:
+        indoorFlowerResult.bundleCount > 0
+          ? indoorFlowerResult.bundleName
+          : null,
+    },
+  };
+
+  console.log("📊 Bundle Info:", bundleInfo);
+
   return {
     items: resultItems,
     subtotal: subtotal,
     total: total,
     discount: discount,
-    bundleInfo: {
-      greenhousePrerollBundles: greenhousePrerollResult.bundleCount,
-      greenhousePrerollRemaining: greenhousePrerollResult.remaining,
-      greenhouseFlowerBundles: greenhouseFlowerResult.bundleCount,
-      greenhouseFlowerRemaining: greenhouseFlowerResult.remaining,
-      indoorPrerollBundles: indoorPrerollResult.bundleCount,
-      indoorPrerollRemaining: indoorPrerollResult.remaining,
-      indoorFlowerBundles: indoorFlowerResult.bundleCount,
-      indoorFlowerRemaining: indoorFlowerResult.remaining,
-      processedItemBundles: processedItems.filter((item) => item.isBundle)
-        .length,
-    },
+    bundleInfo: bundleInfo,
   };
 }
 
@@ -1275,41 +1644,150 @@ function renderCart() {
       const product = getProductById(item.productId);
       if (!product) return "";
 
-      const currentPrice =
+      // Get current price
+      let currentPrice =
         item.customPrice !== undefined
           ? item.customPrice
           : calculatePrice(product, item.quantity);
+
+      // Check if bundle is selected and no custom override
+      if (
+        item.selectedBundle &&
+        item.bundleApplied &&
+        item.customPrice === undefined
+      ) {
+        currentPrice = item.bundleApplied.price;
+      }
+
       const total = currentPrice;
       subtotal += total;
 
+      // ✅ Get available bundles for this product
+      const availableBundles = getAvailableBundles(product, item.quantity);
+
+      // ✅ Build bundle selector HTML with "Add More" functionality
+      let bundleHtml = "";
+      if (availableBundles.length > 0) {
+        bundleHtml = `
+  <div class="bundle-selector mt-2">
+    <select class="bundle-select form-control form-control-sm" data-product-id="${product.id}">
+      <option value="none">Regular Price</option>
+      ${availableBundles
+        .map(
+          (b) => `
+        <option value="${b.id}" ${item.selectedBundle === b.id ? "selected" : ""}>
+          ${b.name}
+        </option>
+      `,
+        )
+        .join("")}
+    </select>
+    ${availableBundles
+      .map((b) => {
+        if (b.needed > 0 && !b.isActive) {
+          // Get all products of the same category/type that can be added
+          const addableProducts = products.filter(
+            (p) =>
+              p.category === b.category &&
+              p.type === b.productType &&
+              p.stock > 0 &&
+              // Don't show products already at max stock or already in cart with high quantity
+              !cart.some(
+                (c) =>
+                  String(c.productId) === String(p.id) && c.quantity >= p.stock,
+              ),
+          );
+
+          // Count how many more items we need to reach the bundle
+          const neededCount = b.needed;
+
+          return `
+          <div class="add-to-bundle-container mt-1">
+            <div class="bundle-progress">
+              <span class="bundle-progress-text">Need ${neededCount} more ${b.productType.toLowerCase()} to complete bundle</span>
+              <div class="bundle-progress-bar">
+                <div class="bundle-progress-fill" style="width: ${(b.currentQty / b.qty) * 100}%"></div>
+              </div>
+            </div>
+            <div class="add-more-controls">
+              <select class="form-control form-control-sm add-product-select" data-bundle-type="${b.type}">
+                <option value="">Select a strain to add...</option>
+                ${addableProducts
+                  .map(
+                    (p) => `
+                  <option value="${p.id}">${p.name} (R${currency(p.price)} each)</option>
+                `,
+                  )
+                  .join("")}
+              </select>
+              <button class="btn btn-primary btn-sm add-to-bundle-btn mt-1" 
+                      data-product-id="${product.id}" 
+                      data-bundle-type="${b.type}"
+                      data-add-qty="1"
+                      title="Add 1 more to get closer to the bundle">
+                <i class="fas fa-plus"></i> Add 1
+              </button>
+            </div>
+            ${
+              b.needed > 1
+                ? `
+              <div class="text-muted small mt-1">
+                <i class="fas fa-info-circle"></i> You can add ${b.needed} more items, one at a time, from any strain
+              </div>
+            `
+                : ""
+            }
+          </div>
+        `;
+        }
+        return "";
+      })
+      .join("")}
+  </div>
+`;
+      }
+
+      // ✅ Show bundle info if applied
+      let bundleInfoHtml = "";
+      if (item.bundleApplied) {
+        bundleInfoHtml = `
+        <div class="bundle-info mt-1">
+          <span class="badge bg-success">${item.bundleApplied.name}</span>
+        </div>
+      `;
+      }
+
       return `
-      <div class="cart-item" data-product-id="${product.id}">
-        <div class="item-info">
-          <span class="item-name">${product.name}</span>
-          <button class="item-remove" data-remove="${product.id}"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="qty-controls">
-          <button class="qty-btn" data-update="${product.id}" data-delta="-1">−</button>
-          <span class="fw-semibold">${item.quantity}</span>
-          <button class="qty-btn" data-update="${product.id}" data-delta="1">+</button>
-        </div>
-        <div class="item-price-edit">
-          <span class="text-muted small">R${currency(product.price)} each</span>
-          <span class="currency-symbol ms-2">R</span>
-          <input type="number" 
-                 class="price-edit-input" 
-                 data-product-id="${product.id}"
-                 step="0.01" 
-                 min="0"
-                 value="${currency(currentPrice)}"
-                 placeholder="0.00"
-          />
-          <button class="reset-price-btn" data-product-id="${product.id}" title="Reset price">
-            <i class="fas fa-undo-alt"></i>
-          </button>
-        </div>
+    <div class="cart-item" data-product-id="${product.id}">
+      <div class="item-info">
+        <span class="item-name">${product.name}</span>
+        <button class="item-remove" data-remove="${product.id}"><i class="fas fa-times"></i></button>
       </div>
-    `;
+      <div class="qty-controls">
+        <button class="qty-btn" data-update="${product.id}" data-delta="-1">−</button>
+        <span class="fw-semibold">${item.quantity}</span>
+        <button class="qty-btn" data-update="${product.id}" data-delta="1">+</button>
+      </div>
+      ${bundleHtml}
+      ${bundleInfoHtml}
+      <div class="item-price-edit">
+        <span class="text-muted small">R${currency(product.price)} each</span>
+        <span class="currency-symbol ms-2">R</span>
+        <input type="number" 
+               class="price-edit-input" 
+               data-product-id="${product.id}"
+               step="0.01" 
+               min="0"
+               value="${currency(currentPrice)}"
+               placeholder="0.00"
+        />
+        ${item.selectedBundle ? `<span class="bundle-price-indicator ms-1 text-success small">Bundle</span>` : ""}
+        <button class="reset-price-btn" data-product-id="${product.id}" title="Reset price">
+          <i class="fas fa-undo-alt"></i>
+        </button>
+      </div>
+    </div>
+  `;
     })
     .join("");
 
@@ -1327,6 +1805,40 @@ function renderCart() {
   }
 
   countEl.textContent = `${cart.reduce((s, i) => s + i.quantity, 0)} items`;
+
+  // ✅ Bundle selector change handler - ADD THIS INSIDE renderCart()
+  list.querySelectorAll(".bundle-select").forEach((select) => {
+    select.removeEventListener("change", handleBundleChange);
+    select.addEventListener("change", handleBundleChange);
+  });
+
+  // ✅ ADD THIS - Add to Bundle button handler
+  list.querySelectorAll(".add-to-bundle-btn").forEach((btn) => {
+    btn.removeEventListener("click", handleAddToBundle);
+    btn.addEventListener("click", handleAddToBundle);
+  });
+
+  // ✅ Add product select change - update button state
+  list.querySelectorAll(".add-product-select").forEach((select) => {
+    select.removeEventListener("change", function () {
+      const container = this.closest(".add-to-bundle-container");
+      const btn = container.querySelector(".add-to-bundle-btn");
+      if (this.value) {
+        btn.disabled = false;
+      } else {
+        btn.disabled = true;
+      }
+    });
+    select.addEventListener("change", function () {
+      const container = this.closest(".add-to-bundle-container");
+      const btn = container.querySelector(".add-to-bundle-btn");
+      if (this.value) {
+        btn.disabled = false;
+      } else {
+        btn.disabled = true;
+      }
+    });
+  });
 
   list.querySelectorAll("[data-remove]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1346,16 +1858,45 @@ function renderCart() {
           cart = cart.filter((i) => String(i.productId) !== id);
         } else {
           const product = getProductById(id);
-          if (product && item.customPrice !== undefined) {
-            const oldQuantity = item.quantity - delta;
-            const oldPrice = item.customPrice;
-            if (oldQuantity > 0) {
-              const perUnitPrice = oldPrice / oldQuantity;
-              item.customPrice = perUnitPrice * item.quantity;
+          if (product) {
+            // ✅ Check if the selected bundle is still valid
+            if (item.selectedBundle) {
+              const availableBundles = getAvailableBundles(
+                product,
+                item.quantity,
+              );
+              const bundleStillValid = availableBundles.some(
+                (b) => b.id === item.selectedBundle,
+              );
+              if (!bundleStillValid) {
+                // Bundle no longer valid, remove it
+                item.selectedBundle = null;
+                item.bundleApplied = null;
+                delete item.customPrice;
+              } else if (
+                item.customPrice !== undefined &&
+                !item.isCustomBundlePrice
+              ) {
+                // Update bundle price if quantity changed but no custom override
+                const bundle = availableBundles.find(
+                  (b) => b.id === item.selectedBundle,
+                );
+                if (bundle) {
+                  item.customPrice = bundle.price;
+                }
+              }
+            } else if (item.customPrice !== undefined) {
+              // Update custom price based on new quantity
+              const oldQuantity = item.quantity - delta;
+              const oldPrice = item.customPrice;
+              if (oldQuantity > 0) {
+                const perUnitPrice = oldPrice / oldQuantity;
+                item.customPrice = perUnitPrice * item.quantity;
+              }
             }
           }
+          renderCart();
         }
-        renderCart();
       }
     });
   });
@@ -1796,7 +2337,7 @@ function addToCart(productId, qty = 1) {
 }
 
 // ============================================
-// CHECKOUT FUNCTION
+// CHECKOUT FUNCTION (FIXED)
 // ============================================
 async function checkout() {
   if (!cart.length) {
@@ -1828,12 +2369,25 @@ async function checkout() {
     }
   }
 
+  // ✅ Apply cart bundles - this preserves customPrice from cart
   const bundleResult = applyCartBundles(cart);
-  const { items, subtotal, total, discount, bundleInfo } = bundleResult;
+  let { items, subtotal, total, discount, bundleInfo } = bundleResult;
+
+  // ✅ Log what came back from bundle calculation
+  console.log(
+    "🔍 Items from bundleResult:",
+    items.map((i) => ({
+      name: i.productName,
+      customPrice: i.customPrice,
+      lineTotal: i.lineTotal,
+      originalTotal: i.originalTotal,
+    })),
+  );
 
   let finalTotal = total;
   let finalItems = items;
 
+  // --- UBERZOL HANDLING ---
   if (payment === "Uberzol" && uberzolTotal !== null) {
     const proportionFactor = uberzolTotal / subtotal;
     finalItems = items.map((item) => ({
@@ -1842,10 +2396,55 @@ async function checkout() {
       isBundle: item.isBundle,
       bundleDiscount: 0,
       bundleType: item.bundleType,
+      customPrice: true,
     }));
     finalTotal = uberzolTotal;
   }
 
+  // ✅ IMPORTANT: For non-Uberzol transactions, check if ANY item has customPrice
+  // and make sure the lineTotal reflects the custom price
+  const hasCustomPrice =
+    finalItems.some((item) => item.customPrice === true) ||
+    cart.some((cartItem) => cartItem.customPrice !== undefined);
+
+  if (hasCustomPrice && payment !== "Uberzol") {
+    console.log("🔄 Applying custom price logic...");
+
+    // ✅ Recalculate lineTotal based on cart custom prices
+    finalItems = finalItems.map((item) => {
+      // Find the original cart item to get its custom price
+      const cartItem = cart.find(
+        (ci) => String(ci.productId) === String(item.productId),
+      );
+
+      // If this item has a custom price in the cart, use it
+      if (cartItem && cartItem.customPrice !== undefined) {
+        const customLineTotal = cartItem.customPrice;
+        console.log(
+          `✏️ Custom price for ${item.productName}: ${customLineTotal}`,
+        );
+        return {
+          ...item,
+          lineTotal: customLineTotal,
+          customPrice: true,
+        };
+      }
+
+      // If this item already has customPrice flag from bundle, keep it
+      if (item.customPrice === true) {
+        return item;
+      }
+
+      // Regular item - keep as is
+      return item;
+    });
+
+    // ✅ Recalculate totals
+    finalTotal = finalItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    console.log("💰 Custom total:", finalTotal);
+  }
+
+  // --- BUILD TRANSACTION ITEMS ---
   const transactionItems = [];
   let actualTotal = 0;
 
@@ -1864,21 +2463,68 @@ async function checkout() {
 
     product.stock -= item.quantity;
 
+    // ✅ Determine if this item has a custom price
+    const isCustomPrice =
+      item.customPrice === true ||
+      payment === "Uberzol" ||
+      cart.find((ci) => String(ci.productId) === String(item.productId))
+        ?.customPrice !== undefined;
+
+    // ✅ Build transaction item with ALL fields
     transactionItems.push({
       productId: String(product.id),
       productName: product.name,
       quantity: item.quantity,
       unitPrice: product.price,
-      lineTotal: item.lineTotal,
-      isBundle: item.isBundle,
+      lineTotal: item.lineTotal, // ✅ Use the lineTotal from finalItems (which has custom price)
+      isBundle: item.isBundle || false,
       bundleDiscount: item.bundleDiscount || 0,
-      customPrice: item.customPrice !== undefined || payment === "Uberzol",
+      customPrice: isCustomPrice, // ✅ This will be saved to database
     });
 
     actualTotal += item.lineTotal;
   }
 
+  console.log(
+    "📝 Transaction items with customPrice:",
+    transactionItems.map((i) => ({
+      name: i.productName,
+      customPrice: i.customPrice,
+      lineTotal: i.lineTotal,
+    })),
+  );
+
   const totalDiscount = subtotal - total + (payment === "Uberzol" ? 0 : 0);
+
+  // ✅ Build the note properly
+  let noteText = null;
+
+  if (payment === "Uberzol") {
+    noteText = `Uberzol total: ${currency(uberzolTotal)}`;
+  } else if (hasCustomPrice) {
+    noteText = `✏️ Custom prices applied`;
+  } else {
+    // Build note from bundle names
+    const bundleNames = [];
+    if (bundleInfo.bundleNames && bundleInfo.bundleNames.greenhousePreroll) {
+      bundleNames.push(bundleInfo.bundleNames.greenhousePreroll);
+    }
+    if (bundleInfo.bundleNames && bundleInfo.bundleNames.greenhouseFlower) {
+      bundleNames.push(bundleInfo.bundleNames.greenhouseFlower);
+    }
+    if (bundleInfo.bundleNames && bundleInfo.bundleNames.indoorPreroll) {
+      bundleNames.push(bundleInfo.bundleNames.indoorPreroll);
+    }
+    if (bundleInfo.bundleNames && bundleInfo.bundleNames.indoorFlower) {
+      bundleNames.push(bundleInfo.bundleNames.indoorFlower);
+    }
+    if (bundleInfo.processedItemBundles > 0) {
+      bundleNames.push(
+        `🎯 ${bundleInfo.processedItemBundles}× Product bundle(s)`,
+      );
+    }
+    noteText = bundleNames.length > 0 ? bundleNames.join(" · ") : null;
+  }
 
   const transaction = {
     payment: payment,
@@ -1887,13 +2533,7 @@ async function checkout() {
     total: actualTotal,
     items: transactionItems,
     date: new Date().toISOString(),
-    note:
-      payment === "Uberzol"
-        ? `Uberzol total: ${currency(uberzolTotal)}`
-        : bundleInfo.greenhousePrerollBundles > 0 ||
-            bundleInfo.indoorPrerollBundles > 0
-          ? `🌿 ${bundleInfo.greenhousePrerollBundles}× Greenhouse bundles · 🏠 ${bundleInfo.indoorPrerollBundles}× Indoor bundles`
-          : null,
+    note: noteText,
   };
 
   const validation = Validators.validateTransaction(transaction);
