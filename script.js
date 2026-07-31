@@ -1981,6 +1981,9 @@ function renderSalesHistory() {
   if (!transactions || transactions.length === 0) {
     tbody.innerHTML =
       '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📦</div><h4>No transactions yet</h4><p>Start making sales to see your history here</p></div></td></tr>';
+    // Hide total row when no transactions
+    document.getElementById("salesTotalDisplay").textContent = "R0.00";
+    document.getElementById("adjustedTotalDisplay").textContent = "R0.00";
     return;
   }
 
@@ -1995,14 +1998,22 @@ function renderSalesHistory() {
   if (!filtered.length) {
     tbody.innerHTML =
       '<tr><td colspan="6"><div class="empty-state">No transactions match the filters.</div></td></tr>';
+    // Show total as 0 when no matches
+    document.getElementById("salesTotalDisplay").textContent = "R0.00";
+    document.getElementById("adjustedTotalDisplay").textContent = "R0.00";
     return;
   }
+
+  // ✅ Calculate total from filtered transactions
+  let totalSum = 0;
 
   tbody.innerHTML = filtered
     .slice()
     .reverse()
     .map((tx) => {
-      // In renderSalesHistory, where the item summary is built
+      // Add to total
+      totalSum += tx.total || 0;
+
       const itemsSummary = tx.items
         .map((item) => {
           let tags = "";
@@ -2012,7 +2023,6 @@ function renderSalesHistory() {
           const paidPrice = item.lineTotal;
           const priceDiff = originalTotal - paidPrice;
 
-          // ✅ Check if this item has a custom price
           if (item.customPrice) {
             tags += " ✏️";
 
@@ -2034,11 +2044,9 @@ function renderSalesHistory() {
           `;
               }
             } else {
-              // Price edited but same as original
               priceDisplay = `<span>${currency(paidPrice)}</span>`;
             }
           } else if (item.isBundle) {
-            // Bundle pricing logic (keep as is)
             tags += " 🎯";
             if (paidPrice !== originalTotal) {
               const diffAmount = Math.abs(priceDiff);
@@ -2051,7 +2059,6 @@ function renderSalesHistory() {
               priceDisplay = `<span>${currency(paidPrice)}</span>`;
             }
           } else {
-            // Regular price
             priceDisplay = `<span>${currency(paidPrice)}</span>`;
           }
 
@@ -2114,6 +2121,31 @@ function renderSalesHistory() {
     })
     .join("");
 
+  // ✅ Update total display
+  document.getElementById("salesTotalDisplay").textContent = currency(totalSum);
+
+  // ✅ Check if there's an active adjustment
+  const adjustmentAmount =
+    parseFloat(localStorage.getItem("salesAdjustmentAmount")) || 0;
+  const adjustmentNote = localStorage.getItem("salesAdjustmentNote") || "";
+
+  if (adjustmentAmount !== 0) {
+    const adjustedTotal = totalSum + adjustmentAmount;
+    document.getElementById("adjustedTotalDisplay").textContent =
+      currency(adjustedTotal);
+    document.getElementById(
+      "adjustedTotalDisplay",
+    ).parentElement.style.backgroundColor = "#fff3cd";
+    document.getElementById("adjustmentRow").style.display = "table-row";
+    document.getElementById("adjustmentAmount").value = adjustmentAmount;
+    document.getElementById("adjustmentNote").value = adjustmentNote;
+  } else {
+    document.getElementById("adjustedTotalDisplay").textContent =
+      currency(totalSum);
+    document.getElementById("adjustmentRow").style.display = "none";
+  }
+
+  // ✅ Event listeners for edit/delete buttons
   document.querySelectorAll(".edit-transaction-btn").forEach((btn) => {
     btn.addEventListener("click", function () {
       const transactionId = this.dataset.transactionId;
@@ -2128,6 +2160,325 @@ function renderSalesHistory() {
     });
   });
 }
+
+// ✅ Setup sales total row event listeners
+function setupSalesTotalRow() {
+  const editTotalBtn = document.getElementById("editTotalBtn");
+  const applyAdjustmentBtn = document.getElementById("applyTotalAdjustmentBtn");
+  const cancelAdjustmentBtn = document.getElementById("cancelAdjustmentBtn");
+  const adjustmentAmount = document.getElementById("adjustmentAmount");
+  const adjustmentNote = document.getElementById("adjustmentNote");
+
+  // Show adjustment row
+  editTotalBtn?.addEventListener("click", function () {
+    document.getElementById("adjustmentRow").style.display = "table-row";
+    adjustmentAmount.focus();
+  });
+
+  // Apply adjustment
+  applyAdjustmentBtn?.addEventListener("click", function () {
+    const amount = parseFloat(adjustmentAmount.value);
+    const note = adjustmentNote.value.trim();
+
+    if (isNaN(amount) || amount === 0) {
+      // Remove adjustment
+      localStorage.removeItem("salesAdjustmentAmount");
+      localStorage.removeItem("salesAdjustmentNote");
+      document.getElementById("adjustmentRow").style.display = "none";
+      renderSalesHistory();
+      showToast(
+        "Adjustment Removed",
+        "Total adjustment has been cleared.",
+        "info",
+      );
+      return;
+    }
+
+    // Save adjustment to localStorage
+    localStorage.setItem("salesAdjustmentAmount", amount.toString());
+    localStorage.setItem("salesAdjustmentNote", note || "Manual adjustment");
+
+    // Re-render to show updated total
+    renderSalesHistory();
+
+    // Show success message
+    const totalSum = parseFloat(
+      document.getElementById("salesTotalDisplay").textContent.replace("R", ""),
+    );
+    const adjustedTotal = totalSum + amount;
+    showToast(
+      "Adjustment Applied",
+      `${amount > 0 ? "Added" : "Deducted"} ${currency(Math.abs(amount))}${note ? ": " + note : ""}. New total: ${currency(adjustedTotal)}`,
+      "success",
+    );
+  });
+
+  // Cancel adjustment
+  cancelAdjustmentBtn?.addEventListener("click", function () {
+    document.getElementById("adjustmentRow").style.display = "none";
+    adjustmentAmount.value = "";
+    adjustmentNote.value = "";
+    // Don't remove the adjustment, just hide the row
+  });
+
+  // Enter key on amount field
+  adjustmentAmount?.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      applyAdjustmentBtn.click();
+    }
+  });
+
+  // Enter key on note field
+  adjustmentNote?.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      applyAdjustmentBtn.click();
+    }
+  });
+}
+
+// ============================================
+// PRE-ROLL SALES SUMMARY
+// ============================================
+
+function renderPreRollSummary() {
+  const tbody = document.getElementById("prSummaryBody");
+  if (!tbody) return;
+
+  // Get today's date
+  const today = new Date();
+  const todayStart = new Date(today);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(today);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  // Get all pre-roll products
+  const preRollProducts = products.filter(
+    (p) => p.type && p.type.toLowerCase() === "pre-roll",
+  );
+
+  if (preRollProducts.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center text-muted py-3">
+          <i class="fas fa-info-circle me-2"></i>No pre-roll products found in inventory
+        </td>
+      </tr>
+    `;
+    document.getElementById("prTotalStart").textContent = "0";
+    document.getElementById("prTotalSold").textContent = "0";
+    document.getElementById("prTotalRemaining").textContent = "0";
+    return;
+  }
+
+  // Calculate sold quantities for today
+  const soldToday = {};
+  const todayTransactions = transactions.filter((tx) => {
+    if (!tx.date) return false;
+    const txDate = new Date(tx.date);
+    return txDate >= todayStart && txDate <= todayEnd;
+  });
+
+  // Count sales per product
+  todayTransactions.forEach((tx) => {
+    if (tx.items) {
+      tx.items.forEach((item) => {
+        // Only count if it's a pre-roll item
+        const product = getProductById(item.productId);
+        if (
+          product &&
+          product.type &&
+          product.type.toLowerCase() === "pre-roll"
+        ) {
+          const productId = String(item.productId);
+          if (!soldToday[productId]) {
+            soldToday[productId] = 0;
+          }
+          soldToday[productId] += item.quantity || 0;
+        }
+      });
+    }
+  });
+
+  // Build the table rows
+  let totalStart = 0;
+  let totalSold = 0;
+  let totalRemaining = 0;
+
+  const rows = preRollProducts.map((p) => {
+    const startStock = p.stock || 0;
+    const sold = soldToday[String(p.id)] || 0;
+    const remaining = startStock - sold;
+
+    totalStart += startStock;
+    totalSold += sold;
+    totalRemaining += remaining;
+
+    // Determine stock status color
+    let stockColor = "text-success";
+    if (remaining < 5) stockColor = "text-danger";
+    else if (remaining < 15) stockColor = "text-warning";
+
+    // Calculate percentage sold
+    let percentageDisplay = "";
+    if (sold > 0 && startStock > 0) {
+      const pct = ((sold / startStock) * 100).toFixed(1);
+      percentageDisplay = `<span class="text-muted small"> (${pct}%)</span>`;
+    }
+
+    return `
+      <tr>
+        <td>
+          <strong>${p.name}</strong>
+          <div class="text-muted small">
+            <span class="product-badge ${getCategoryClass(p.category)}">${p.category}</span>
+            <span class="product-badge ${getTypeClass(p.type)}">${p.type}</span>
+          </div>
+        </td>
+        <td class="fw-bold">${startStock}</td>
+        <td class="fw-bold ${sold > 0 ? "text-primary" : "text-muted"}">
+          ${sold > 0 ? sold : "0"}${percentageDisplay}
+        </td>
+        <td class="fw-bold ${stockColor}">${remaining}</td>
+      </tr>
+    `;
+  });
+
+  // Update the table
+  tbody.innerHTML = rows.join("");
+
+  // Update totals
+  document.getElementById("prTotalStart").textContent = totalStart;
+  document.getElementById("prTotalSold").textContent = totalSold;
+  document.getElementById("prTotalRemaining").textContent = totalRemaining;
+
+  // Update the date display
+  const dateDisplay = document.getElementById("prDateDisplay");
+  if (dateDisplay) {
+    dateDisplay.textContent = today.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+}
+
+// ============================================
+// EXPORT PRE-ROLL SUMMARY CSV
+// ============================================
+
+function exportPRSummaryCSV() {
+  const preRollProducts = products.filter(
+    (p) => p.type && p.type.toLowerCase() === "pre-roll",
+  );
+
+  if (preRollProducts.length === 0) {
+    showToast("No Data", "No pre-roll products to export.", "warning");
+    return;
+  }
+
+  // Calculate sold quantities for today
+  const soldToday = {};
+  const today = new Date();
+  const todayStart = new Date(today);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(today);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const todayTransactions = transactions.filter((tx) => {
+    if (!tx.date) return false;
+    const txDate = new Date(tx.date);
+    return txDate >= todayStart && txDate <= todayEnd;
+  });
+
+  todayTransactions.forEach((tx) => {
+    if (tx.items) {
+      tx.items.forEach((item) => {
+        const product = getProductById(item.productId);
+        if (
+          product &&
+          product.type &&
+          product.type.toLowerCase() === "pre-roll"
+        ) {
+          const productId = String(item.productId);
+          if (!soldToday[productId]) {
+            soldToday[productId] = 0;
+          }
+          soldToday[productId] += item.quantity || 0;
+        }
+      });
+    }
+  });
+
+  // Build CSV rows
+  const rows = [
+    [
+      "Item",
+      "Category",
+      "Type",
+      "Starting Stock",
+      "Sold Today",
+      "Remaining Stock",
+      "Sales Percentage",
+    ],
+  ];
+
+  preRollProducts.forEach((p) => {
+    const startStock = p.stock || 0;
+    const sold = soldToday[String(p.id)] || 0;
+    const remaining = startStock - sold;
+    const percentage =
+      startStock > 0 ? ((sold / startStock) * 100).toFixed(1) : "0";
+
+    rows.push([
+      p.name,
+      p.category || "N/A",
+      p.type || "Pre-roll",
+      startStock,
+      sold,
+      remaining,
+      `${percentage}%`,
+    ]);
+  });
+
+  // Add totals row
+  const totalStart = preRollProducts.reduce(
+    (sum, p) => sum + (p.stock || 0),
+    0,
+  );
+  const totalSold = preRollProducts.reduce(
+    (sum, p) => sum + (soldToday[String(p.id)] || 0),
+    0,
+  );
+  const totalRemaining = totalStart - totalSold;
+  const totalPercentage =
+    totalStart > 0 ? ((totalSold / totalStart) * 100).toFixed(1) : "0";
+
+  rows.push([
+    "TOTAL",
+    "",
+    "",
+    totalStart,
+    totalSold,
+    totalRemaining,
+    `${totalPercentage}%`,
+  ]);
+
+  // Create and download CSV
+  const csv = rows.map((row) => row.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `pre-roll-summary-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+
+  showToast("Exported", "Pre-roll summary CSV downloaded!", "success");
+}
+
+// Call this after renderSalesHistory
+// In renderAll(), add:
+// setupSalesTotalRow();
 
 function renderDashboard() {
   if (!transactions) transactions = [];
@@ -2306,7 +2657,9 @@ function renderAll() {
   renderInventoryTable();
   renderSalesHistory();
   renderDashboard();
+  renderPreRollSummary();
   updateCategoryTypeLists();
+  setupSalesTotalRow();
 }
 
 // ----- CART ACTIONS -----
@@ -3413,21 +3766,34 @@ function hideClearDayModal() {
 }
 
 async function confirmClearDay() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStart = today.toISOString();
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStart = tomorrow.toISOString();
 
   try {
-    const todayTransactions = transactions.filter((tx) =>
-      tx.date?.startsWith(today),
-    );
+    // ✅ FIXED: Use proper date range comparison
+    const todayTransactions = transactions.filter((tx) => {
+      if (!tx.date) return false;
+      const txDate = new Date(tx.date);
+      return txDate >= todayStart && txDate < tomorrowStart;
+    });
 
     if (todayTransactions.length === 0) {
-      showToast("No sales found", "No sales records for today to clear.");
+      showToast(
+        "No sales found",
+        "No sales records for today to clear.",
+        "warning",
+      );
       hideClearDayModal();
       return;
     }
 
     console.log(
-      `Clearing ${todayTransactions.length} transactions for ${today}...`,
+      `Clearing ${todayTransactions.length} transactions for ${today.toLocaleDateString()}...`,
     );
 
     showToast(
@@ -3459,33 +3825,14 @@ async function confirmClearDay() {
       }
     }
 
-    transactions = transactions.filter((tx) => !tx.date?.startsWith(today));
-
-    sales = [];
-    transactions.forEach((tx) => {
-      tx.items.forEach((item) => {
-        sales.push({
-          id: tx.id,
-          productId: item.productId,
-          productName: item.productName,
-          quantity: item.quantity,
-          price: item.unitPrice,
-          payment: tx.payment,
-          total: item.lineTotal,
-          date: tx.date,
-          note: tx.note,
-          isBundle: item.isBundle,
-          bundleDiscount: item.bundleDiscount,
-        });
-      });
-    });
-
+    // Reload data after clearing
+    await loadData();
     renderAll();
 
     if (errorCount === 0) {
       showToast(
         "Day Cleared! 🧹",
-        `Successfully cleared ${deletedCount} transactions for ${new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`,
+        `Successfully cleared ${deletedCount} transactions for ${today.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`,
         "success",
       );
     } else {
@@ -3501,6 +3848,7 @@ async function confirmClearDay() {
   } catch (error) {
     console.error("Error clearing day:", error);
     ErrorHandler.handle(error, "clearDay");
+    hideClearDayModal();
   }
 }
 
@@ -3697,6 +4045,10 @@ async function init() {
   document
     .getElementById("exportSalesBtn")
     .addEventListener("click", exportSalesCsv);
+
+  document
+    .getElementById("exportPRSummaryBtn")
+    ?.addEventListener("click", exportPRSummaryCSV);
 
   // Clear day button
   document

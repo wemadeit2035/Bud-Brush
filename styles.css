@@ -1,15 +1,120 @@
+/* ============================================
+   ROOT VARIABLES & THEME - NEUMORPHISM
+   ============================================ */
+:root {
+  /* Primary Colors - Soft Neumorphism Palette */
+  --bg-main: #e0e5ec;
+  --bg-card: #e0e5ec;
+  --bg-dark: #c8cdd8;
+  --bg-light: #f0f5fc;
+  
+  /* Text Colors */
+  --text-primary: #2d3436;
+  --text-secondary: #636e72;
+  --text-muted: #a0aec0;
+  
+  /* Accent Colors - Softer versions */
+  --primary: #5b8c8a;
+  --primary-dark: #4a7a78;
+  --primary-light: #7dadab;
+  --primary-bg: #d5e8e7;
+  
+  /* Accent Colors */
+  --accent-gold: #c4a35a;
+  --accent-amber: #d4a04a;
+  --accent-purple: #7c6ba8;
+  --accent-danger: #c0395a;
+  --accent-success: #4a9a7a;
+  
+  /* Neumorphism Shadows */
+  --shadow-neumorph-light: 8px 8px 16px #c8cdd8, -8px -8px 16px #f8fdfe;
+  --shadow-neumorph-dark: 4px 4px 8px #c8cdd8, -4px -4px 8px #f8fdfe;
+  --shadow-neumorph-inset: inset 4px 4px 8px #c8cdd8, inset -4px -4px 8px #f8fdfe;
+  --shadow-neumorph-pressed: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
+  --shadow-neumorph-hover: 6px 6px 12px #c8cdd8, -6px -6px 12px #f8fdfe;
+  --shadow-neumorph-flat: 2px 2px 4px #c8cdd8, -2px -2px 4px #f8fdfe;
+  
+  /* Border Radius - Slightly larger for neumorphism */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+}
+
+/* Dark Mode - Neumorphism Dark */
+[data-theme="dark"] {
+  --bg-main: #1a1d23;
+  --bg-card: #1a1d23;
+  --bg-dark: #121418;
+  --bg-light: #24282e;
+  
+  --text-primary: #e8ecf1;
+  --text-secondary: #a8b2c0;
+  --text-muted: #5a6470;
+  
+  --shadow-neumorph-light: 8px 8px 16px #121418, -8px -8px 16px #22262e;
+  --shadow-neumorph-dark: 4px 4px 8px #121418, -4px -4px 8px #22262e;
+  --shadow-neumorph-inset: inset 4px 4px 8px #121418, inset -4px -4px 8px #22262e;
+  --shadow-neumorph-pressed: inset 2px 2px 4px #121418, inset -2px -2px 4px #22262e;
+  --shadow-neumorph-hover: 6px 6px 12px #121418, -6px -6px 12px #22262e;
+  --shadow-neumorph-flat: 2px 2px 4px #121418, -2px -2px 4px #22262e;
+  
+  --primary: #6a9f9d;
+  --primary-dark: #5a8f8d;
+  --primary-light: #8abfbd;
+  --primary-bg: #1d2e2d;
+}
+
+/* ============================================
+   BASE STYLES - NEUMORPHISM
+   ============================================ */
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 body {
   margin: 0;
-  font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
-  background: #f4f7fb;
-  color: #14213d;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  transition: background var(--transition-normal), color var(--transition-normal);
+  min-height: 100vh;
 }
 
-/* ---- LOGIN OVERLAY ---- */
+/* ============================================
+   SCROLLBAR - Neumorphic Style
+   ============================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+  border-radius: 10px;
+  box-shadow: inset 2px 2px 4px var(--bg-dark), inset -2px -2px 4px var(--bg-light);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-main);
+  border-radius: 10px;
+  box-shadow: 2px 2px 4px var(--bg-dark), -2px -2px 4px var(--bg-light);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  box-shadow: 1px 1px 3px var(--bg-dark), -1px -1px 3px var(--bg-light);
+}
+
+/* ============================================
+   LOGIN OVERLAY - Neumorphism
+   ============================================ */
 #loginOverlay {
   position: fixed;
   inset: 0;
@@ -17,64 +122,124 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(26, 29, 35, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: fadeIn 0.4s ease;
 }
 
 .login-card {
-  background: #ffffff;
-  border-radius: 32px;
+  background: var(--bg-main);
+  border-radius: var(--radius-xl);
   padding: 2.5rem 2rem 2rem;
   width: 100%;
   max-width: 400px;
-  box-shadow: 0 40px 70px -30px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-neumorph-light);
   text-align: center;
+  animation: slideUp 0.5s ease;
+  border: none;
+}
+
+.login-header .logo-icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 0.5rem;
 }
 
 .login-header h1 {
   font-weight: 700;
   font-size: 1.8rem;
   margin-bottom: 0.25rem;
-  color: #0f766e;
+  background: linear-gradient(135deg, var(--primary), var(--accent-gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .login-header p {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
 }
 
 .login-body .form-control {
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 0.8rem 1rem;
-  border: 1px solid #d1d5db;
+  border: none;
+  background: var(--bg-main);
+  box-shadow: var(--shadow-neumorph-inset);
+  transition: var(--transition-fast);
+  color: var(--text-primary);
+}
+
+.login-body .form-control:focus {
+  outline: none;
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.login-body .btn-primary {
+  background: var(--bg-main);
+  border: none;
+  padding: 0.8rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  transition: var(--transition-fast);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-neumorph-dark);
+}
+
+.login-body .btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.login-body .btn-primary:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-neumorph-pressed);
 }
 
 .login-error {
   margin-top: 0.75rem;
-  color: #dc2626;
+  color: var(--accent-danger);
   font-size: 0.9rem;
+  font-weight: 500;
 }
 
-/* ---- APP SHELL ---- */
-.app-shell {
-  min-height: 100vh;
-}
-
-.container {
-  max-width: 1320px;
-}
-
+/* ============================================
+   TOPBAR - Neumorphism
+   ============================================ */
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.4rem 1.6rem;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
-  border-bottom: 1px solid #e6ebf3;
+  padding: 0.75rem 1.5rem;
+  background: var(--bg-main);
+  border-bottom: none;
   gap: 1rem;
-  box-shadow: 0 8px 24px -20px rgba(15, 23, 42, 0.35);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.topbar-left .logo-icon {
+  font-size: 1.8rem;
+}
+
+.topbar-left h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--primary), var(--accent-gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .topbar-actions {
@@ -84,486 +249,954 @@ body {
   flex-wrap: wrap;
 }
 
+/* Sync Status - Neumorphic */
 .sync-status {
-  font-size: 0.8rem;
-  padding: 0.45rem 0.7rem;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.75rem;
   border-radius: 999px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #475569;
+  background: var(--bg-main);
+  color: var(--text-secondary);
+  border: none;
+  font-weight: 500;
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
 .sync-status.success {
-  background: #ecfdf5;
-  color: #166534;
-  border-color: #a7f3d0;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
+  color: var(--accent-success);
 }
 
 .sync-status.warning {
-  background: #fff7ed;
-  color: #9a2c00;
-  border-color: #fed7aa;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
+  color: var(--accent-amber);
 }
 
 .sync-status.danger {
-  background: #fee2e2;
-  color: #991b1b;
-  border-color: #fecaca;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
+  color: var(--accent-danger);
 }
 
-.topbar h1 {
-  margin: 0;
-  font-size: 1.4rem;
-  font-weight: 700;
+.sync-status.info {
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
+  color: var(--primary);
 }
 
+/* Theme Toggle - Neumorphic */
+.theme-toggle {
+  background: var(--bg-main);
+  border: none;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  box-shadow: var(--shadow-neumorph-dark);
+}
+
+.theme-toggle:hover {
+  transform: rotate(30deg) scale(1.05);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.theme-toggle:active {
+  transform: rotate(30deg) scale(0.95);
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+/* Refresh Button - Neumorphic */
+#refreshDataBtn {
+  background: var(--bg-main);
+  border: none;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  box-shadow: var(--shadow-neumorph-dark);
+}
+
+#refreshDataBtn:hover {
+  transform: rotate(180deg) scale(1.05);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+#refreshDataBtn:active {
+  transform: rotate(180deg) scale(0.95);
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+#refreshDataBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ============================================
+   TAB NAVIGATION - Neumorphism
+   ============================================ */
 .tab-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.6rem;
+  padding: 0.75rem 0;
 }
 
 .tab-btn {
   border: none;
-  padding: 0.7rem 1rem;
+  padding: 0.6rem 1.2rem;
   border-radius: 999px;
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--bg-main);
+  color: var(--text-secondary);
   font-weight: 600;
+  font-size: 0.85rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
+  position: relative;
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
 .tab-btn:hover {
-  background: #e5e7eb;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-neumorph-hover);
+  color: var(--text-primary);
+}
+
+.tab-btn:active {
+  transform: translateY(0px);
+  box-shadow: var(--shadow-neumorph-pressed);
 }
 
 .tab-btn.active {
-  background: linear-gradient(135deg, #0f766e, #2563eb);
-  color: #fff;
+  background: var(--bg-main);
+  color: var(--primary);
+  box-shadow: var(--shadow-neumorph-inset);
 }
 
+.tab-btn .badge-tab {
+  background: rgba(91, 140, 138, 0.15);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.65rem;
+  margin-left: 0.3rem;
+  color: var(--text-secondary);
+}
+
+.tab-btn.active .badge-tab {
+  background: rgba(91, 140, 138, 0.2);
+  color: var(--primary);
+}
+
+/* Clear Day Button - Neumorphic Danger */
+.tab-btn#clearDayBtn {
+  background: var(--bg-main);
+  color: var(--accent-danger);
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.tab-btn#clearDayBtn:hover {
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.tab-btn#clearDayBtn:active {
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+/* ============================================
+   VIEW PANES
+   ============================================ */
 .view-pane {
   display: none;
   animation: fadeUp 0.3s ease forwards;
+  padding: 1rem 0;
 }
 
 .view-pane.active {
   display: block;
 }
 
+/* ============================================
+   CARDS - Neumorphism
+   ============================================ */
 .card {
-  border: 1px solid #e9edf5;
-  border-radius: 22px;
-  background: linear-gradient(135deg, #ffffff 0%, #fcfdff 100%);
-  box-shadow: 0 18px 40px -24px rgba(15, 23, 42, 0.35);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--bg-main);
+  box-shadow: var(--shadow-neumorph-light);
+  transition: all var(--transition-normal);
   overflow: hidden;
 }
 
-.search-input,
-.filter-select,
-.form-control,
-.form-select {
-  border-radius: 14px;
-  border: 1px solid #d1d5db;
-  background: #f9fafb;
+.card:hover {
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.card-header {
+  background: transparent;
+  border-bottom: none;
+  padding: 1rem 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.card-body {
+  padding: 1.25rem;
+}
+
+/* ============================================
+   SEARCH & FILTERS - Neumorphism
+   ============================================ */
+.search-bar {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
 }
 
 .search-input {
-  max-width: 280px;
+  flex: 1;
+  min-width: 200px;
+  border-radius: var(--radius-md);
+  border: none;
+  padding: 0.6rem 1rem;
+  background: var(--bg-main);
+  transition: var(--transition-fast);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-neumorph-inset);
 }
 
-.sales-controls {
-  flex-wrap: nowrap;
+.search-input:focus {
+  outline: none;
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
 }
 
 .filter-select {
-  width: 140px;
+  border-radius: var(--radius-md);
+  border: none;
+  padding: 0.6rem 1rem;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  transition: var(--transition-fast);
   min-width: 140px;
+  box-shadow: var(--shadow-neumorph-inset);
 }
 
+.filter-select:focus {
+  outline: none;
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+/* Filter Chips - Neumorphism */
+.filter-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.chip {
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  background: var(--bg-main);
+  border: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.chip:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-neumorph-hover);
+  color: var(--text-primary);
+}
+
+.chip:active {
+  transform: translateY(0px);
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.chip.active {
+  background: var(--bg-main);
+  color: var(--primary);
+  box-shadow: var(--shadow-neumorph-inset);
+}
+
+/* ============================================
+   PRODUCT GRID - Neumorphism
+   ============================================ */
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1rem;
 }
 
 .product-card {
   text-align: left;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
+  border: none;
+  border-radius: var(--radius-md);
   padding: 1rem;
-  background: #fff;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+  background: var(--bg-main);
+  transition: all var(--transition-fast);
   cursor: pointer;
+  position: relative;
+  box-shadow: var(--shadow-neumorph-dark);
 }
 
 .product-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 18px -12px rgba(15, 23, 42, 0.7);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-neumorph-hover);
 }
 
-.product-card .price {
+.product-card:active {
+  transform: scale(0.97);
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.product-card .product-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.product-card .product-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.product-card .product-price {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #0f766e;
+  color: var(--primary);
+  margin-top: 0.3rem;
 }
 
-.product-card .meta,
-.text-muted {
-  color: #6b7280;
+.product-card .product-stock {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
 }
 
+.product-card .product-stock.low {
+  color: var(--accent-danger);
+  font-weight: 600;
+}
+
+.product-card .product-bundles {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  padding-top: 0.3rem;
+}
+
+/* Product Badges - Neumorphism */
 .product-badge {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 0.25rem 0.6rem;
-  font-size: 0.72rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.65rem;
   font-weight: 700;
-  margin-left: 0.25rem;
-  margin-top: 0.1rem;
   white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--bg-main);
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
 .category-outdoor {
-  background: #dcfce7;
-  color: #166534;
+  color: #2d7a5a;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
 }
 .category-greenhouse {
-  background: #dbeafe;
-  color: #1d4ed8;
+  color: #2d5a7a;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
 }
 .category-indoor {
-  background: #fef3c7;
-  color: #b45309;
+  color: #7a6a2d;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
 }
 .category-indoor-exotic,
 .category-indoor-hydro {
-  background: #f5e0ff;
-  color: #7c3aed;
+  color: #5a3a7a;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
 }
 .category-default {
-  background: #e5e7eb;
-  color: #374151;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
 .type-pre-roll {
-  background: #cffafe;
-  color: #0f766e;
+  color: #2d6a6a;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
 }
 .type-flower {
-  background: #fce7f3;
-  color: #be185d;
+  color: #7a2d4a;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
 }
 .type-default {
-  background: #e5e7eb;
-  color: #374151;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
-.sticky-card {
-  position: sticky;
-  top: 1rem;
+/* Quick Add Buttons - Neumorphism */
+.product-quick-actions {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
 }
 
-.cart-list {
+.product-quick-actions .qty-btn-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-main);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.product-quick-actions .qty-btn-sm:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.product-quick-actions .qty-btn-sm:active {
+  transform: translateY(0px);
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+/* ============================================
+   CART - Neumorphism
+   ============================================ */
+.cart-container {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  height: 100%;
+  min-height: 400px;
+}
+
+.cart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.cart-header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.cart-header .cart-item-count {
+  background: var(--bg-main);
+  color: var(--primary);
+  padding: 0.2rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-neumorph-inset);
+}
+
+.cart-items {
+  flex: 1;
+  overflow-y: auto;
   max-height: 420px;
-  overflow: auto;
-  padding-right: 0.2rem;
+  padding: 0.5rem 0;
 }
 
 .cart-item {
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
+  border: none;
+  border-radius: var(--radius-sm);
   padding: 0.75rem;
-  background: #fcfdff;
+  margin-bottom: 0.5rem;
+  background: var(--bg-main);
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.cart-item:hover {
+  box-shadow: var(--shadow-neumorph-dark);
+}
+
+.cart-item .item-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.cart-item .item-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.cart-item .item-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  padding: 0 0.25rem;
+}
+
+.cart-item .item-remove:hover {
+  color: var(--accent-danger);
 }
 
 .cart-item .qty-controls {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   margin-top: 0.4rem;
 }
 
-.qty-btn {
-  width: 28px;
-  height: 28px;
+.cart-item .qty-btn {
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   border: none;
-  background: #e0f2fe;
-  color: #0369a1;
+  background: var(--bg-main);
+  color: var(--text-secondary);
+  font-weight: 700;
   cursor: pointer;
+  transition: var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  transition: background 0.2s ease;
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
-.qty-btn:hover {
-  background: #bae6fd;
+.cart-item .qty-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-neumorph-hover);
+  color: var(--primary);
 }
 
-.cart-summary {
-  border-top: 1px solid #e5e7eb;
-  margin-top: 1rem;
-  padding-top: 1rem;
+.cart-item .qty-btn:active {
+  transform: translateY(0px);
+  box-shadow: var(--shadow-neumorph-pressed);
 }
 
-.table thead th {
-  font-size: 0.76rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #64748b;
-  background: #f8fafc;
-}
-
-.table td,
-.table th {
-  padding-top: 0.9rem;
-  padding-bottom: 0.9rem;
-}
-
-/* Badge styles for payment methods */
-.badge-cash {
-  background: #dcfce7;
-  color: #166534;
-  padding: 0.28rem 0.7rem;
-  border-radius: 999px;
-  display: inline-block;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-.badge-yoco {
-  background: #dbeafe;
-  color: #1d4ed8;
-  padding: 0.28rem 0.7rem;
-  border-radius: 999px;
-  display: inline-block;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-.badge-eft {
-  background: #fef3c7;
-  color: #b45309;
-  padding: 0.28rem 0.7rem;
-  border-radius: 999px;
-  display: inline-block;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-.badge-uberzol {
-  background: #f3e8ff;
-  color: #7c3aed;
-  padding: 0.28rem 0.7rem;
-  border-radius: 999px;
-  display: inline-block;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-/* Cart price editing */
-.price-edit-group {
+.cart-item .item-price-edit {
   display: flex;
   align-items: center;
   gap: 0.3rem;
+  margin-top: 0.4rem;
 }
 
-.price-edit-group .currency-symbol {
-  font-weight: 600;
-  color: #6b7280;
-  font-size: 0.85rem;
-}
-
-.cart-price-input {
+.cart-item .price-edit-input {
   width: 80px;
-  padding: 0.15rem 0.3rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  padding: 0.15rem 0.4rem;
+  border: none;
+  border-radius: var(--radius-sm);
   font-size: 0.85rem;
   text-align: right;
   font-weight: 600;
-  color: #0f766e;
-  background: #fafbfc;
-  transition: all 0.2s ease;
+  color: var(--primary);
+  background: var(--bg-main);
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-neumorph-inset);
 }
 
-.cart-price-input:focus {
+.cart-item .price-edit-input:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
-  background: white;
+  box-shadow: var(--shadow-neumorph-pressed);
 }
 
-.cart-price-input:hover {
-  border-color: #9ca3af;
+.cart-item .price-edit-input::placeholder {
+  color: var(--text-muted);
 }
 
-.reset-price-btn {
-  padding: 0;
+.cart-item .reset-price-btn {
+  background: var(--bg-main);
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.cart-item .reset-price-btn:hover {
+  color: var(--primary);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.cart-item .reset-price-btn:active {
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+/* Cart Footer - Neumorphism */
+.cart-footer {
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  padding-top: 1rem;
+  margin-top: auto;
+}
+
+.cart-totals {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+.cart-totals .total-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.cart-totals .total-amount {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.cart-totals .total-amount.uberzol {
+  color: var(--accent-purple);
+}
+
+.cart-payment {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0;
+}
+
+.cart-payment select {
+  flex: 1;
+  min-width: 120px;
+  border-radius: var(--radius-sm);
+  border: none;
+  padding: 0.5rem;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-neumorph-inset);
+}
+
+.cart-payment select:focus {
+  outline: none;
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.uberzol-subtotal-group {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.uberzol-subtotal-group.show {
+  display: flex;
+}
+
+.uberzol-subtotal-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.uberzol-subtotal-group input {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  color: var(--accent-purple);
+  background: var(--bg-main);
+  max-width: 150px;
+  box-shadow: var(--shadow-neumorph-inset);
+}
+
+.uberzol-subtotal-group input:focus {
+  outline: none;
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.uberzol-subtotal-group .reset-uberzol-btn {
+  background: var(--bg-main);
+  border: none;
+  color: var(--text-muted);
   font-size: 0.8rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.uberzol-subtotal-group .reset-uberzol-btn:hover {
+  color: var(--primary);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.uberzol-subtotal-group .reset-uberzol-btn:active {
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+/* Checkout Button - Neumorphism */
+.btn-checkout {
+  width: 100%;
+  padding: 0.8rem;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-main);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-neumorph-dark);
+}
+
+.btn-checkout:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.btn-checkout:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.btn-checkout:disabled {
   opacity: 0.5;
-  transition: opacity 0.2s ease;
+  cursor: not-allowed;
+  transform: none;
 }
 
-.reset-price-btn:hover {
-  opacity: 1;
+/* ============================================
+   INVENTORY TABLE - Neumorphism
+   ============================================ */
+.table-container {
+  overflow-x: auto;
 }
 
-/* Mobile responsive */
-@media (max-width: 768px) {
-  .cart-price-input {
-    width: 70px;
-    font-size: 0.8rem;
-  }
-
-  .price-edit-group {
-    gap: 0.2rem;
-  }
+.table {
+  margin-bottom: 0;
+  font-size: 0.9rem;
 }
 
-/* Stock status indicators */
+.table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: var(--bg-main);
+  border-bottom: none;
+  padding: 0.75rem 0.5rem;
+  font-weight: 700;
+}
+
+.table td {
+  padding: 0.75rem 0.5rem;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.table tr:hover td {
+  background: rgba(91, 140, 138, 0.05);
+}
+
 .stock-good {
-  color: #16a34a;
+  color: var(--accent-success);
   font-weight: 600;
 }
 
 .stock-medium {
-  color: #f59e0b;
+  color: var(--accent-amber);
   font-weight: 600;
 }
 
 .stock-low {
-  color: #dc2626;
+  color: var(--accent-danger);
   font-weight: 600;
 }
 
-/* Dashboard Cards */
-.dash-card {
-  border-radius: 22px;
-  color: white;
-  min-height: 140px;
-  padding: 1.1rem 1.15rem;
+/* Payment Badges - Neumorphism */
+.badge-payment {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: inline-block;
+  background: var(--bg-main);
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.badge-cash {
+  color: #2d7a5a;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
+}
+.badge-yoco {
+  color: #3a5a7a;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
+}
+.badge-eft {
+  color: #7a6a2d;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
+}
+.badge-uberzol {
+  color: #5a3a7a;
+  box-shadow: inset 2px 2px 4px #c8cdd8, inset -2px -2px 4px #f8fdfe;
+}
+
+.price-strikethrough {
+  text-decoration: line-through;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-right: 0.3rem;
+}
+
+/* ============================================
+   DASHBOARD - Neumorphism
+   ============================================ */
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.dash-stat {
+  padding: 1.25rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-main);
+  box-shadow: var(--shadow-neumorph-dark);
+  transition: var(--transition-fast);
   position: relative;
   overflow: hidden;
-  box-shadow: 0 18px 35px -20px rgba(15, 23, 42, 0.45);
+  border: none;
 }
 
-.dash-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.24),
-    transparent 60%
-  );
-  pointer-events: none;
+.dash-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-neumorph-hover);
 }
 
-.dash-card h2 {
-  margin-top: 1rem;
-  font-size: 1.6rem;
-  position: relative;
-  z-index: 1;
-}
-
-.dash-card .dash-label {
-  font-size: 0.9rem;
-  opacity: 0.9;
-  position: relative;
-  z-index: 1;
-}
-
-.dash-card i {
-  font-size: 1.5rem;
-  opacity: 0.6;
-  position: relative;
-  z-index: 1;
-}
-
-.revenue {
-  background: linear-gradient(135deg, #0f766e 0%, #0b5e5a 100%);
-}
-.cash {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-}
-.yoco {
-  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
-}
-.eft {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-}
-.uberzol {
-  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
-}
-
-/* Uberzol Subtotal Input */
-.uberzol-subtotal-input {
-  transition: all 0.2s ease;
-}
-
-.uberzol-subtotal-input:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
-  background: white;
-}
-
-.uberzol-subtotal-input:hover {
-  border-color: #9ca3af;
-}
-
-#uberzolSubtotalGroup .currency-symbol {
+.dash-stat .stat-label {
+  font-size: 0.8rem;
   font-weight: 600;
-  color: #6b7280;
-  font-size: 0.95rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-/* Show a visual indicator when Uberzol is active */
-.uberzol-active .cart-summary {
-  border-color: #7c3aed;
+.dash-stat .stat-value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0.2rem 0;
 }
 
+.dash-stat .stat-icon {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  font-size: 2rem;
+  opacity: 0.15;
+}
+
+.dash-stat.revenue {
+  border-left: 4px solid var(--primary);
+}
+.dash-stat.cash {
+  border-left: 4px solid #3a6a8a;
+}
+.dash-stat.yoco {
+  border-left: 4px solid var(--accent-purple);
+}
+.dash-stat.eft {
+  border-left: 4px solid var(--accent-amber);
+}
+.dash-stat.uberzol {
+  border-left: 4px solid #7a5a8a;
+}
+
+.dash-stat .stat-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--bg-main);
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.stat-trend.up {
+  color: var(--accent-success);
+}
+
+.stat-trend.down {
+  color: var(--accent-danger);
+}
+
+/* Payment Breakdown - Neumorphism */
 .payment-bar {
   margin-bottom: 0.8rem;
 }
-.payment-bar .bar {
+
+.payment-bar .bar-track {
   height: 8px;
-  background: #eef2f7;
+  background: var(--bg-main);
   border-radius: 999px;
   overflow: hidden;
-  margin-top: 0.35rem;
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
-}
-.payment-bar .bar > span {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, #14b8a6, #2563eb);
-  border-radius: inherit;
+  margin-top: 0.3rem;
+  box-shadow: var(--shadow-neumorph-inset);
 }
 
-.empty-state {
-  border: 1px dashed #cbd5e1;
-  border-radius: 14px;
-  padding: 1rem;
-  color: #64748b;
-  text-align: center;
+.payment-bar .bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+
+/* Daily Chart - Neumorphism */
+.daily-chart {
+  padding: 1rem 0;
 }
 
 .daily-chart-bars {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.9rem;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.75rem;
   align-items: end;
-  min-height: 240px;
-  padding: 0.35rem 0.15rem 0.1rem;
+  min-height: 200px;
+  padding: 0.5rem 0;
 }
 
 .daily-chart-bar-group {
@@ -571,100 +1204,151 @@ body {
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.4rem;
   height: 100%;
 }
 
 .daily-chart-bar {
   width: 100%;
   min-height: 20px;
-  border-radius: 999px 999px 10px 10px;
-  background: linear-gradient(180deg, #14b8a6 0%, #2563eb 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 12px 24px -12px rgba(37, 99, 235, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 6px 6px 4px 4px;
+  background: var(--bg-main);
+  box-shadow: var(--shadow-neumorph-dark);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 0.35rem;
+  padding-top: 0.2rem;
+  transition: height 0.6s ease;
   position: relative;
-  overflow: hidden;
 }
 
-.daily-chart-bar::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.25),
-    transparent 55%
-  );
-  pointer-events: none;
-}
-
-.daily-chart-value {
-  font-size: 0.72rem;
+.daily-chart-bar .chart-value {
+  font-size: 0.6rem;
   font-weight: 700;
-  color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  position: relative;
-  z-index: 1;
+  color: var(--text-primary);
 }
 
 .daily-chart-label {
-  font-size: 0.74rem;
-  color: #64748b;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 500;
   text-align: center;
-  font-weight: 600;
 }
 
-/* Bundle input styles */
-.bundle-input-group {
-  display: flex;
-  gap: 0.5rem;
+/* ============================================
+   EMPTY STATE - Neumorphism
+   ============================================ */
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-muted);
+}
+
+.empty-state .empty-icon {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.5;
+}
+
+.empty-state h4 {
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.empty-state p {
+  font-size: 0.9rem;
+}
+
+/* ============================================
+   TOAST NOTIFICATIONS - Neumorphism
+   ============================================ */
+.toast-notification {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 10001;
+  padding: 1rem 1.5rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-main);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-neumorph-light);
+  display: none;
   align-items: center;
-}
-
-.bundle-input-group .form-control {
-  flex: 1;
-}
-
-.bundle-input-group .btn {
-  flex-shrink: 0;
-}
-
-/* Clear Day Button */
-#clearDayBtn {
-  padding: 0.6rem 1.5rem;
-  font-weight: 600;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #e17055, #d63031);
-  color: white;
-  box-shadow:
-    6px 6px 12px var(--shadow-dark),
-    -6px -6px 12px var(--shadow-light);
-  transition: all 0.3s ease;
+  gap: 0.75rem;
+  animation: slideUp 0.4s ease;
+  max-width: 420px;
+  min-width: 280px;
   border: none;
 }
 
-#clearDayBtn:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    8px 8px 16px var(--shadow-dark),
-    -8px -8px 16px var(--shadow-light);
-  opacity: 0.9;
+.toast-notification.show {
+  display: flex;
 }
 
-#clearDayBtn:active {
-  transform: translateY(1px);
-  box-shadow:
-    inset 4px 4px 8px var(--shadow-dark),
-    inset -4px -4px 8px var(--shadow-light);
+.toast-notification .toast-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  background: var(--bg-main);
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
-/* Confirmation Modal */
+.toast-notification.success .toast-icon {
+  color: var(--accent-success);
+}
+
+.toast-notification.error .toast-icon {
+  color: var(--accent-danger);
+}
+
+.toast-notification.warning .toast-icon {
+  color: var(--accent-amber);
+}
+
+.toast-notification.info .toast-icon {
+  color: var(--primary);
+}
+
+.toast-notification .toast-content {
+  flex: 1;
+}
+
+.toast-notification .toast-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.toast-notification .toast-message {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.toast-notification .toast-close {
+  background: var(--bg-main);
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0 0.25rem;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.toast-notification .toast-close:hover {
+  color: var(--text-primary);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+/* ============================================
+   CONFIRMATION MODAL - Neumorphism
+   ============================================ */
 .confirmation-modal-overlay {
   position: fixed;
   inset: 0;
@@ -672,8 +1356,9 @@ body {
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(26, 29, 35, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .confirmation-modal-overlay.active {
@@ -681,26 +1366,14 @@ body {
 }
 
 .confirmation-modal {
-  background: var(--bg-card);
-  border-radius: 24px;
+  background: var(--bg-main);
+  border-radius: var(--radius-lg);
   padding: 2rem;
   max-width: 440px;
   width: 90%;
-  box-shadow:
-    20px 20px 40px var(--shadow-dark),
-    -20px -20px 40px var(--shadow-light);
+  box-shadow: var(--shadow-neumorph-light);
   animation: modalSlideIn 0.3s ease;
-}
-
-@keyframes modalSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  border: none;
 }
 
 .confirmation-modal h3 {
@@ -722,142 +1395,492 @@ body {
 
 .confirmation-modal .modal-actions .btn {
   min-width: 100px;
-}
-
-.confirmation-modal .text-danger {
-  color: #e17055 !important;
-}
-
-.confirmation-modal .text-muted {
-  color: var(--text-secondary) !important;
-}
-
-/* Success Toast */
-.toast-notification {
-  position: fixed;
-  bottom: 30px;
-  right: 30px;
-  z-index: 10001;
-  padding: 1rem 1.5rem;
-  border-radius: 16px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  box-shadow:
-    12px 12px 24px var(--shadow-dark),
-    -12px -12px 24px var(--shadow-light);
-  display: none;
-  align-items: center;
-  gap: 0.75rem;
-  animation: slideUp 0.4s ease;
-  max-width: 400px;
-}
-
-.toast-notification.show {
-  display: flex;
-}
-
-.toast-notification.success {
-  border-left: 4px solid #00b894;
-}
-
-.toast-notification .toast-icon {
-  font-size: 1.5rem;
-  color: #00b894;
-}
-
-.toast-notification .toast-content {
-  flex: 1;
-}
-
-.toast-notification .toast-content .toast-title {
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-sm);
   font-weight: 600;
-  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  background: var(--bg-main);
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
-.toast-notification .toast-content .toast-message {
-  font-size: 0.85rem;
+.confirmation-modal .modal-actions .btn-secondary {
   color: var(--text-secondary);
 }
 
-/* Warning toast style */
-.toast-notification.warning {
-  border-left: 4px solid #fdcb6e;
+.confirmation-modal .modal-actions .btn-secondary:hover {
+  box-shadow: var(--shadow-neumorph-hover);
 }
 
-.toast-notification.warning .toast-icon i {
-  color: #fdcb6e !important;
+.confirmation-modal .modal-actions .btn-secondary:active {
+  box-shadow: var(--shadow-neumorph-pressed);
 }
 
-.logo-link {
-  text-decoration: none;
+.confirmation-modal .modal-actions .btn-danger {
+  color: var(--accent-danger);
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.confirmation-modal .modal-actions .btn-danger:hover {
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.confirmation-modal .modal-actions .btn-danger:active {
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+/* ============================================
+   EDIT TRANSACTION MODAL - Neumorphism
+   ============================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 29, 35, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.modal-overlay.active {
   display: flex;
+}
+
+.modal-content {
+  background: var(--bg-main);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  max-width: 720px;
+  width: 95%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-neumorph-light);
+  animation: modalSlideIn 0.3s ease;
+  border: none;
+}
+
+.modal-content .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  margin-bottom: 1rem;
+}
+
+.modal-content .modal-header h3 {
+  margin: 0;
+  font-weight: 700;
+}
+
+.modal-content .modal-close {
+  background: var(--bg-main);
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.modal-content .modal-close:hover {
+  color: var(--text-primary);
+  transform: rotate(90deg);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.modal-content .modal-close:active {
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+/* Edit Items - Neumorphism */
+.edit-item-row {
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background: var(--bg-main);
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.edit-item-row:hover {
+  box-shadow: var(--shadow-neumorph-dark);
+}
+
+.edit-item-row .edit-item-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   align-items: center;
 }
 
-.logo-image {
-  height: 50px;
-  width: auto;
+.edit-item-row .edit-item-controls select,
+.edit-item-row .edit-item-controls input {
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  box-shadow: var(--shadow-neumorph-inset);
 }
 
-/* Custom price indicator */
-.custom-price-item {
-  border-left: 3px solid #7c3aed !important;
-  background: rgba(124, 58, 237, 0.05);
+.edit-item-row .edit-item-controls select:focus,
+.edit-item-row .edit-item-controls input:focus {
+  outline: none;
+  box-shadow: var(--shadow-neumorph-pressed);
 }
 
-.custom-price-badge {
-  display: inline-block;
-  background: #7c3aed;
-  color: white;
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
-  font-size: 0.6rem;
-  font-weight: 700;
-  margin-left: 0.3rem;
+.edit-item-row .edit-item-controls .qty-input {
+  width: 60px;
+  text-align: center;
 }
 
-/* Bundle Selector */
+.edit-item-row .edit-item-controls .price-input {
+  width: 100px;
+  text-align: right;
+  font-weight: 600;
+}
+
+.edit-item-row .edit-item-remove {
+  background: var(--bg-main);
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  padding: 0.2rem 0.4rem;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.edit-item-row .edit-item-remove:hover {
+  color: var(--accent-danger);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.edit-item-row .edit-item-remove:active {
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.edit-item-row .edit-item-original {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+}
+
+/* ============================================
+   BUTTONS - Neumorphism
+   ============================================ */
+.btn-outline-secondary {
+  border: none;
+  background: var(--bg-main);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  transition: var(--transition-fast);
+  cursor: pointer;
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.btn-outline-secondary:hover {
+  box-shadow: var(--shadow-neumorph-hover);
+  color: var(--text-primary);
+}
+
+.btn-outline-secondary:active {
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.btn-success {
+  background: var(--bg-main);
+  color: var(--primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1.2rem;
+  font-weight: 600;
+  transition: var(--transition-fast);
+  cursor: pointer;
+  box-shadow: var(--shadow-neumorph-dark);
+}
+
+.btn-success:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.btn-success:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.btn-danger {
+  background: var(--bg-main);
+  color: var(--accent-danger);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.8rem;
+  font-weight: 600;
+  transition: var(--transition-fast);
+  cursor: pointer;
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.btn-danger:hover {
+  box-shadow: var(--shadow-neumorph-hover);
+}
+
+.btn-danger:active {
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.btn-sm {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  text-decoration: none;
+}
+
+.btn-link:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+/* ============================================
+   FORM ELEMENTS - Neumorphism
+   ============================================ */
+.form-control {
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-neumorph-inset);
+  transition: var(--transition-fast);
+}
+
+.form-control:focus {
+  outline: none;
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.form-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+/* Bundle Input Groups - Neumorphism */
+.bundle-input-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.bundle-input-group .form-control {
+  flex: 1;
+}
+
+/* ============================================
+   BUNDLE SELECTOR - Neumorphism
+   ============================================ */
 .bundle-selector {
   margin: 0.4rem 0;
 }
 
 .bundle-selector select {
   font-size: 0.8rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.3rem 0.5rem;
   border-radius: 6px;
-  border: 1px solid #d1d5db;
-  background: #f9fafb;
+  border: none;
+  background: var(--bg-main);
   width: 100%;
   max-width: 220px;
   color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-neumorph-inset);
 }
 
 .bundle-selector select:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(26, 107, 106, 0.2);
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.bundle-selector select:hover {
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.bundle-selector select option {
+  padding: 0.25rem;
+  background: var(--bg-main);
+}
+
+.bundle-selector select option:checked {
+  background: var(--primary);
+  color: white;
+}
+
+.bundle-selector select option:hover {
+  background: var(--primary-light);
+}
+
+/* Bundle Info Badge - Neumorphism */
+.bundle-info {
+  margin-top: 0.25rem;
 }
 
 .bundle-info .badge {
   font-size: 0.7rem;
-  padding: 0.25rem 0.5rem;
-  background: #d1fae5;
-  color: #065f46;
+  padding: 0.25rem 0.6rem;
+  background: var(--bg-main);
+  color: var(--accent-success);
+  border-radius: 999px;
+  font-weight: 600;
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
 .bundle-price-indicator {
   font-size: 0.65rem;
   font-weight: 600;
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--bg-main);
+  color: var(--accent-success);
   padding: 0.1rem 0.4rem;
   border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-neumorph-flat);
 }
 
-@keyframes slideUp {
+.custom-price-override {
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: var(--bg-main);
+  color: var(--accent-amber);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+/* Bundle Progress - Neumorphism */
+.bundle-progress {
+  margin: 0.25rem 0;
+}
+
+.bundle-progress-text {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.bundle-progress-bar {
+  height: 4px;
+  background: var(--bg-main);
+  border-radius: 999px;
+  margin-top: 0.15rem;
+  overflow: hidden;
+  box-shadow: var(--shadow-neumorph-inset);
+}
+
+.bundle-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.add-to-bundle-container {
+  margin-top: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-main);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-neumorph-flat);
+}
+
+.add-to-bundle-container .add-more-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.add-to-bundle-container .add-product-select {
+  flex: 1;
+  min-width: 120px;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-neumorph-inset);
+  font-size: 0.75rem;
+}
+
+.add-to-bundle-container .add-product-select:focus {
+  outline: none;
+  box-shadow: var(--shadow-neumorph-pressed);
+}
+
+.add-to-bundle-container .add-to-bundle-btn {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.7rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg-main);
+  color: var(--primary);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-neumorph-flat);
+  transition: all var(--transition-fast);
+}
+
+.add-to-bundle-container .add-to-bundle-btn:hover {
+  box-shadow: var(--shadow-neumorph-hover);
+  transform: translateY(-1px);
+}
+
+.add-to-bundle-container .add-to-bundle-btn:active {
+  box-shadow: var(--shadow-neumorph-pressed);
+  transform: translateY(0px);
+}
+
+.add-to-bundle-container .add-to-bundle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+@keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -865,56 +1888,350 @@ body {
   }
 }
 
-/* Responsive styles */
-@media (max-width: 768px) {
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .search-input {
-    max-width: 100%;
-  }
-  .sticky-card {
-    position: static;
-  }
-  .sales-controls {
-    flex-wrap: wrap;
-  }
-  .filter-select {
-    width: 100%;
-  }
-  .product-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  }
-  #uberzolAmountGroup {
-    margin-top: 0.5rem;
-  }
-  .bundle-input-group {
-    flex-wrap: wrap;
-  }
-  .bundle-input-group .form-control {
-    min-width: 80px;
-  }
-  .dash-card {
-    min-height: 100px;
-  }
-  .dash-card h2 {
-    font-size: 1.2rem;
-  }
-}
-
-/* Animations */
-.fade-in {
-  animation: fadeUp 0.3s ease forwards;
-}
-
-@keyframes fadeUp {
-  0% {
+@keyframes slideUp {
+  from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(20px) scale(0.98);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%,
   100% {
     opacity: 1;
-    transform: translateY(0);
   }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Skeleton Loading - Neumorphism */
+.skeleton {
+  animation: pulse 1.5s ease-in-out infinite;
+  background: var(--bg-main);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-neumorph-inset);
+}
+
+.skeleton-title {
+  height: 20px;
+  width: 80%;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-price {
+  height: 16px;
+  width: 40%;
+}
+
+/* ============================================
+   RESPONSIVE - Neumorphism
+   ============================================ */
+@media (max-width: 992px) {
+  .topbar {
+    flex-wrap: wrap;
+    padding: 0.5rem 1rem;
+  }
+
+  .topbar-left h1 {
+    font-size: 1rem;
+  }
+
+  .dash-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 0 0.5rem;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .topbar-left {
+    justify-content: center;
+  }
+
+  .topbar-actions {
+    justify-content: center;
+  }
+
+  .tab-nav {
+    justify-content: center;
+    gap: 0.25rem;
+  }
+
+  .tab-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.75rem;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .product-card {
+    padding: 0.75rem;
+  }
+
+  .product-card .product-name {
+    font-size: 0.85rem;
+  }
+
+  .dash-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .dash-stat {
+    padding: 0.75rem;
+  }
+
+  .dash-stat .stat-value {
+    font-size: 1.2rem;
+  }
+
+  .cart-items {
+    max-height: 300px;
+  }
+
+  .modal-content {
+    padding: 1rem;
+    width: 98%;
+    max-height: 95vh;
+  }
+
+  .edit-item-row .edit-item-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .edit-item-row .edit-item-controls select,
+  .edit-item-row .edit-item-controls input {
+    width: 100% !important;
+  }
+
+  .toast-notification {
+    bottom: 1rem;
+    right: 1rem;
+    left: 1rem;
+    max-width: none;
+    min-width: auto;
+  }
+
+  .daily-chart-bars {
+    gap: 0.3rem;
+    min-height: 150px;
+  }
+
+  .daily-chart-bar .chart-value {
+    font-size: 0.5rem;
+  }
+
+  .confirmation-modal {
+    padding: 1.5rem;
+    margin: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dash-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+  }
+
+  .dash-stat .stat-value {
+    font-size: 1rem;
+  }
+
+  .dash-stat .stat-label {
+    font-size: 0.65rem;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .cart-payment {
+    flex-direction: column;
+  }
+
+  .cart-payment select {
+    width: 100%;
+  }
+
+  .uberzol-subtotal-group {
+    flex-wrap: wrap;
+  }
+
+  .uberzol-subtotal-group input {
+    max-width: none;
+    width: 100%;
+  }
+}
+
+/* Touch Optimizations */
+@media (pointer: coarse) {
+  .product-card {
+    padding: 0.75rem 1rem;
+  }
+
+  .product-quick-actions .qty-btn-sm {
+    width: 36px;
+    height: 36px;
+    font-size: 0.9rem;
+  }
+
+  .cart-item .qty-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .tab-btn {
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+  }
+
+  .btn-checkout {
+    padding: 1rem;
+    font-size: 1.1rem;
+  }
+}
+
+/* ============================================
+   UTILITY CLASSES - Neumorphism
+   ============================================ */
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+.text-success {
+  color: var(--accent-success) !important;
+}
+
+.text-danger {
+  color: var(--accent-danger) !important;
+}
+
+.text-primary {
+  color: var(--primary) !important;
+}
+
+.fw-bold {
+  font-weight: 700 !important;
+}
+
+.fw-semibold {
+  font-weight: 600 !important;
+}
+
+.gap-1 {
+  gap: 0.25rem;
+}
+.gap-2 {
+  gap: 0.5rem;
+}
+.gap-3 {
+  gap: 1rem;
+}
+
+.mb-1 {
+  margin-bottom: 0.25rem;
+}
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+.mb-3 {
+  margin-bottom: 1rem;
+}
+
+.mt-1 {
+  margin-top: 0.25rem;
+}
+.mt-2 {
+  margin-top: 0.5rem;
+}
+.mt-3 {
+  margin-top: 1rem;
+}
+
+.d-flex {
+  display: flex;
+}
+.justify-content-between {
+  justify-content: space-between;
+}
+.align-items-center {
+  align-items: center;
+}
+.flex-wrap {
+  flex-wrap: wrap;
+}
+.flex-column {
+  flex-direction: column;
+}
+.flex-grow-1 {
+  flex-grow: 1;
+}
+
+.w-100 {
+  width: 100%;
+}
+.h-100 {
+  height: 100%;
+}
+
+.border-bottom {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.p-2 {
+  padding: 0.5rem;
+}
+.p-3 {
+  padding: 1rem;
+}
+.py-2 {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.px-2 {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.rounded {
+  border-radius: var(--radius-sm);
+}
+.rounded-lg {
+  border-radius: var(--radius-md);
 }
