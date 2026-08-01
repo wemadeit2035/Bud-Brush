@@ -2235,150 +2235,8 @@ function setupSalesTotalRow() {
     }
   });
 }
-
 // ============================================
-// DAILY STOCK SNAPSHOT FUNCTIONS
-// ============================================
-
-// Get today's date as string (YYYY-MM-DD)
-function getTodayDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// Save daily stock snapshots for all pre-roll products
-async function saveDailyStockSnapshot() {
-  const today = getTodayDate();
-  const preRollProducts = products.filter(
-    (p) => p.type && p.type.toLowerCase() === "pre-roll",
-  );
-
-  if (preRollProducts.length === 0) return;
-
-  try {
-    for (const product of preRollProducts) {
-      // Check if snapshot already exists for today
-      const { data: existing, error: checkError } = await database.client
-        .from("daily_stock_snapshots")
-        .select("id")
-        .eq("product_id", String(product.id))
-        .eq("date", today)
-        .single();
-
-      if (checkError && checkError.code !== "PGRST116") {
-        console.error("Error checking snapshot:", checkError);
-        continue;
-      }
-
-      // If no snapshot exists, create one
-      if (!existing) {
-        const { error: insertError } = await database.client
-          .from("daily_stock_snapshots")
-          .insert({
-            product_id: String(product.id),
-            date: today,
-            starting_stock: product.stock || 0,
-          });
-
-        if (insertError) {
-          console.error("Error saving snapshot:", insertError);
-        } else {
-          console.log(
-            `✅ Snapshot saved for ${product.name}: ${product.stock}`,
-          );
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Error in saveDailyStockSnapshot:", error);
-  }
-}
-
-// Get starting stock for a product on a specific date
-async function getStartingStock(productId, date = null) {
-  const targetDate = date || getTodayDate();
-
-  try {
-    const { data, error } = await database.client
-      .from("daily_stock_snapshots")
-      .select("starting_stock")
-      .eq("product_id", String(productId))
-      .eq("date", targetDate)
-      .single();
-
-    if (error) {
-      if (error.code === "PGRST116") {
-        // No snapshot found, use current stock as fallback
-        const product = getProductById(productId);
-        return product ? product.stock : 0;
-      }
-      console.error("Error getting starting stock:", error);
-      return 0;
-    }
-
-    return data ? data.starting_stock : 0;
-  } catch (error) {
-    console.error("Error in getStartingStock:", error);
-    return 0;
-  }
-}
-
-// Get all starting stocks for today
-async function getTodayStartingStocks() {
-  const today = getTodayDate();
-  const preRollProducts = products.filter(
-    (p) => p.type && p.type.toLowerCase() === "pre-roll",
-  );
-
-  const result = {};
-
-  for (const product of preRollProducts) {
-    const startingStock = await getStartingStock(product.id, today);
-    result[String(product.id)] = startingStock;
-  }
-
-  return result;
-}
-
-// Ensure today's snapshot exists (call this on app startup)
-async function ensureTodaySnapshot() {
-  const today = getTodayDate();
-  const preRollProducts = products.filter(
-    (p) => p.type && p.type.toLowerCase() === "pre-roll",
-  );
-
-  let snapshotsCreated = 0;
-
-  for (const product of preRollProducts) {
-    const { data: existing, error } = await database.client
-      .from("daily_stock_snapshots")
-      .select("id")
-      .eq("product_id", String(product.id))
-      .eq("date", today)
-      .single();
-
-    if (!existing && !error) {
-      // No snapshot exists, create one with current stock
-      const { error: insertError } = await database.client
-        .from("daily_stock_snapshots")
-        .insert({
-          product_id: String(product.id),
-          date: today,
-          starting_stock: product.stock || 0,
-        });
-
-      if (!insertError) {
-        snapshotsCreated++;
-      }
-    }
-  }
-
-  if (snapshotsCreated > 0) {
-    console.log(
-      `✅ Created ${snapshotsCreated} daily stock snapshots for today`,
-    );
-  }
-  return snapshotsCreated;
-}
+// UPDATED PRE-ROLL SUMMARY RENDER
 
 // ============================================
 // UPDATED PRE-ROLL SUMMARY RENDER
@@ -2413,9 +2271,6 @@ async function renderPreRollSummary() {
     document.getElementById("prTotalRemaining").textContent = "0";
     return;
   }
-
-  // Get starting stocks from daily snapshots
-  const startingStocks = await getTodayStartingStocks();
 
   // Calculate sold quantities for today
   const soldToday = {};
@@ -2452,14 +2307,9 @@ async function renderPreRollSummary() {
 
   const rows = preRollProducts.map((p) => {
     const productId = String(p.id);
-    // ✅ Use STARTING STOCK from snapshot, NOT current stock
-    const startStock =
-      startingStocks[productId] !== undefined
-        ? startingStocks[productId]
-        : p.stock;
     const sold = soldToday[productId] || 0;
-    // ✅ Remaining = starting stock - sold (this should equal current stock if no other changes)
-    const remaining = startStock - sold;
+    const startStock = p.stock + sold;
+    const remaining = p.stock;
 
     totalStart += startStock;
     totalSold += sold;
@@ -2514,150 +2364,7 @@ async function renderPreRollSummary() {
     });
   }
 }
-
-// ============================================
-// CHECK FOR NEW DAY - Auto-create snapshots
-// ============================================
-
-// Check if it's a new day and create snapshots if needed
-async function checkAndInitNewDay() {
-  const today = getTodayDate();
-  const lastChecked = localStorage.getItem("bb_last_day_checked");
-
-  if (lastChecked !== today) {
-    console.log(
-      `📅 New day detected! Creating stock snapshots for ${today}...`,
-    );
-    await ensureTodaySnapshot();
-    localStorage.setItem("bb_last_day_checked", today);
-    return true;
-  }
-  return false;
-}
-
-// ============================================
-// UPDATED EXPORT FUNCTION
-// ============================================
-
-async function exportPRSummaryCSV() {
-  const preRollProducts = products.filter(
-    (p) => p.type && p.type.toLowerCase() === "pre-roll",
-  );
-
-  if (preRollProducts.length === 0) {
-    showToast("No Data", "No pre-roll products to export.", "warning");
-    return;
-  }
-
-  const startingStocks = await getTodayStartingStocks();
-
-  // Calculate sold quantities for today
-  const soldToday = {};
-  const today = new Date();
-  const todayStart = new Date(today);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(today);
-  todayEnd.setHours(23, 59, 59, 999);
-
-  const todayTransactions = transactions.filter((tx) => {
-    if (!tx.date) return false;
-    const txDate = new Date(tx.date);
-    return txDate >= todayStart && txDate <= todayEnd;
-  });
-
-  todayTransactions.forEach((tx) => {
-    if (tx.items) {
-      tx.items.forEach((item) => {
-        const product = getProductById(item.productId);
-        if (
-          product &&
-          product.type &&
-          product.type.toLowerCase() === "pre-roll"
-        ) {
-          const productId = String(item.productId);
-          if (!soldToday[productId]) {
-            soldToday[productId] = 0;
-          }
-          soldToday[productId] += item.quantity || 0;
-        }
-      });
-    }
-  });
-
-  // Build CSV rows
-  const rows = [
-    [
-      "Item",
-      "Category",
-      "Type",
-      "Starting Stock",
-      "Sold Today",
-      "Remaining Stock",
-      "Sales Percentage",
-    ],
-  ];
-
-  preRollProducts.forEach((p) => {
-    const productId = String(p.id);
-    const startStock =
-      startingStocks[productId] !== undefined
-        ? startingStocks[productId]
-        : p.stock;
-    const sold = soldToday[productId] || 0;
-    const remaining = startStock - sold;
-    const percentage =
-      startStock > 0 ? ((sold / startStock) * 100).toFixed(1) : "0";
-
-    rows.push([
-      p.name,
-      p.category || "N/A",
-      p.type || "Pre-roll",
-      startStock,
-      sold,
-      remaining,
-      `${percentage}%`,
-    ]);
-  });
-
-  // Add totals row
-  const totalStart = preRollProducts.reduce((sum, p) => {
-    const productId = String(p.id);
-    return (
-      sum +
-      (startingStocks[productId] !== undefined
-        ? startingStocks[productId]
-        : p.stock)
-    );
-  }, 0);
-  const totalSold = preRollProducts.reduce(
-    (sum, p) => sum + (soldToday[String(p.id)] || 0),
-    0,
-  );
-  const totalRemaining = totalStart - totalSold;
-  const totalPercentage =
-    totalStart > 0 ? ((totalSold / totalStart) * 100).toFixed(1) : "0";
-
-  rows.push([
-    "TOTAL",
-    "",
-    "",
-    totalStart,
-    totalSold,
-    totalRemaining,
-    `${totalPercentage}%`,
-  ]);
-
-  // Create and download CSV
-  const csv = rows.map((row) => row.join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `pre-roll-summary-${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
-
-  showToast("Exported", "Pre-roll summary CSV downloaded!", "success");
-}
+// (Removed snapshot daily-check and snapshot-based export implementation)
 
 // ============================================
 // EXPORT PRE-ROLL SUMMARY CSV
@@ -3195,13 +2902,11 @@ async function checkout() {
     await withRetry(() => database.saveTransaction(transaction));
     await saveProducts();
 
-    await ensureTodaySnapshot(); // This ensures snapshots exist for today
-    await saveDailyStockSnapshot();
+    // ✅ NO snapshot code needed here anymore
 
     cart = [];
     renderAll();
     setSyncStatus("Transaction recorded!", "success");
-
     showTransactionSummary(transaction);
   } catch (error) {
     ErrorHandler.handle(error, "checkout");
@@ -4245,7 +3950,6 @@ async function initializeApp() {
 
   await loadData();
 
-  await checkAndInitNewDay();
   renderAll();
   setupThemeToggle();
   setupFilterChips();
