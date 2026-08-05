@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 min-h-screen;
+}
+
+button,
+input,
+select,
+textarea {
+  @apply outline-none focus:ring-2 focus:ring-sky-400;
+}
+
+.table-container {
+  @apply overflow-x-auto;
+}
+
+.card {
+  @apply bg-white shadow-sm rounded-2xl border border-slate-200;
+}
+
+.table {
+  @apply min-w-full border-collapse;
+}
+
+.table th,
+.table td {
+  @apply px-4 py-3 border-b border-slate-200;
+}
+
+.empty-state {
+  @apply text-center py-8 text-slate-500;
+}
+
+.toast-notification {
+  @apply fixed bottom-6 right-6 shadow-xl rounded-2xl bg-slate-900 text-white p-4 hidden;
+}
+
+.toast-notification.show {
+  @apply block;
+}
