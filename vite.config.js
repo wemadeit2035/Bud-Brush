@@ -7,18 +7,20 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: false,
-    // Ensure proper MIME types
+    // ✅ Critical: Ensure assets are properly handled
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        entryFileNames: "assets/[name].[hash].js",
+        chunkFileNames: "assets/[name].[hash].js",
+        assetFileNames: "assets/[name].[hash].[ext]",
       },
     },
   },
+  // ✅ Add this to ensure proper MIME types
   server: {
     port: 5173,
-  },
-  // Add this to fix MIME types
-  optimizeDeps: {
-    include: ["react", "react-dom"],
+    headers: {
+      "Content-Type": "application/javascript",
+    },
   },
 });

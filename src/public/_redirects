@@ -1,1 +1,7 @@
-/*    /index.html   200
+# Force proper MIME types
+/assets/*.js /200:application/javascript
+/*.js /200:application/javascript
+/*.mjs /200:application/javascript
+
+# SPA routing
+/* /index.html 200

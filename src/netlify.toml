@@ -5,6 +5,7 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# ✅ Critical: Fix MIME types
 [[headers]]
   for = "/*.js"
   [headers.values]
@@ -20,6 +21,12 @@
   [headers.values]
     Content-Type = "text/css"
 
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Content-Type = "application/javascript"
+
+# SPA routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
