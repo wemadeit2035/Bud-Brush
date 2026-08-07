@@ -299,8 +299,9 @@ export default function CartPanel({
                     <button
                       className="ml-1 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700 hover:bg-rose-200"
                       onClick={() => removeItem(item.productId)}
+                      aria-label="Remove item"
                     >
-                      <i className="fa fa-times" />
+                      <span className="text-sm leading-none">x</span>
                     </button>
                   </div>
                 </div>

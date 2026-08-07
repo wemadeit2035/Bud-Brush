@@ -17,6 +17,8 @@ import {
   deleteTransaction,
 } from "./services/database";
 
+const AUTH_STORAGE_KEY = "budbrush_is_authenticated";
+
 function App() {
   const [activeView, setActiveView] = useState("pos");
   const [products, setProducts] = useState([]);
@@ -38,7 +40,14 @@ function App() {
       return [];
     }
   });
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
+    } catch (error) {
+      console.error("Failed to load auth state:", error);
+      return false;
+    }
+  });
   const [syncStatus, setSyncStatus] = useState("Connecting...");
   const [toast, setToast] = useState(null);
 
@@ -64,6 +73,14 @@ function App() {
       console.error("Failed to save daily adjustments:", error);
     }
   }, [dailyAdjustments]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, String(isAuthenticated));
+    } catch (error) {
+      console.error("Failed to save auth state:", error);
+    }
+  }, [isAuthenticated]);
 
   const loadArchiveData = async () => {
     const loadedArchives = await loadArchives();

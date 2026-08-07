@@ -31,6 +31,32 @@ export default function ProductGrid({ products, cart, setCart }) {
     }
   };
 
+  const getCategoryBadgeClass = (category) => {
+    const normalized = String(category || "").toLowerCase();
+
+    if (normalized.includes("greenhouse")) {
+      return "bg-emerald-100 text-emerald-800 border border-emerald-200";
+    }
+    if (normalized.includes("indoor")) {
+      return "bg-amber-100 text-amber-800 border border-amber-200";
+    }
+
+    return "bg-slate-100 text-slate-700 border border-slate-200";
+  };
+
+  const getTypeBadgeClass = (type) => {
+    const normalized = String(type || "").toLowerCase();
+
+    if (normalized.includes("pre-roll")) {
+      return "bg-sky-100 text-sky-800 border border-sky-200";
+    }
+    if (normalized.includes("flower")) {
+      return "bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200";
+    }
+
+    return "bg-slate-100 text-slate-700 border border-slate-200";
+  };
+
   return (
     <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -80,10 +106,14 @@ export default function ProductGrid({ products, cart, setCart }) {
                 <div>
                   <h3 className="font-semibold">{product.name}</h3>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                    <span className="rounded-full bg-slate-100 px-2 py-1">
+                    <span
+                      className={`rounded-full px-2 py-1 ${getCategoryBadgeClass(product.category)}`}
+                    >
                       {product.category}
                     </span>
-                    <span className="rounded-full bg-slate-100 px-2 py-1">
+                    <span
+                      className={`rounded-full px-2 py-1 ${getTypeBadgeClass(product.type)}`}
+                    >
                       {product.type}
                     </span>
                   </div>
