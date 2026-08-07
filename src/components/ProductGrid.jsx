@@ -92,18 +92,6 @@ export default function ProductGrid({ products, cart, setCart }) {
               <div className="mb-4 text-sm text-slate-500">
                 {product.stock} in stock
               </div>
-              {(product.category === "Greenhouse" &&
-                product.type === "Pre-roll") ||
-              (product.category === "Greenhouse" &&
-                product.type === "Flower") ||
-              ((product.category === "Indoor" ||
-                product.category === "Indoor Exotic" ||
-                product.category === "Indoor Hydro") &&
-                (product.type === "Pre-roll" || product.type === "Flower")) ? (
-                <div className="mb-4 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                  Bundle offer available
-                </div>
-              ) : null}
               <div className="flex flex-wrap gap-2">
                 <button
                   className="rounded-full bg-slate-100 px-4 py-2 text-sm"

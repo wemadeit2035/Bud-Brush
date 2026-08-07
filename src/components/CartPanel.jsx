@@ -18,7 +18,8 @@ export default function CartPanel({
   showToast,
 }) {
   const [paymentMethod, setPaymentMethod] = useState("Cash");
-  const [uberzolAmount, setUberzolAmount] = useState(0);
+  const [uberzolAmount, setUberzolAmount] = useState("");
+  const [isUberzolEdited, setIsUberzolEdited] = useState(false);
 
   const bundleSummary = useMemo(
     () => applyCartBundles(cart, products),
@@ -27,10 +28,9 @@ export default function CartPanel({
 
   const subtotal = bundleSummary.total;
 
-  // ✅ FIXED: Remove item when quantity becomes 0
+  // ✅ Update quantity - remove item when 0
   const updateQuantity = (productId, delta) => {
     setCart((currentCart) => {
-      // Find the item
       const itemIndex = currentCart.findIndex(
         (item) => item.productId === productId,
       );
@@ -40,19 +40,17 @@ export default function CartPanel({
       const item = currentCart[itemIndex];
       const newQuantity = Math.max(0, item.quantity + delta);
 
-      // ✅ If quantity becomes 0, remove the item
       if (newQuantity === 0) {
         return currentCart.filter((_, index) => index !== itemIndex);
       }
 
-      // Otherwise update the quantity
       const updatedCart = [...currentCart];
       updatedCart[itemIndex] = { ...item, quantity: newQuantity };
       return updatedCart;
     });
   };
 
-  // ✅ Add function to remove item completely
+  // ✅ Remove item completely
   const removeItem = (productId) => {
     setCart((currentCart) =>
       currentCart.filter((item) => item.productId !== productId),
@@ -60,11 +58,59 @@ export default function CartPanel({
     showToast("Removed", "Item removed from cart.", "info");
   };
 
+  // ✅ Calculate total based on payment method
   const calculateTotal = () => {
-    if (paymentMethod === "Uberzol" && uberzolAmount > 0) {
-      return uberzolAmount;
+    // If Uberzol and user has edited the amount
+    if (paymentMethod === "Uberzol" && isUberzolEdited) {
+      const amount = parseFloat(uberzolAmount);
+      if (!isNaN(amount) && amount > 0) {
+        return amount;
+      }
     }
     return subtotal;
+  };
+
+  // ✅ Handle payment method change
+  const handlePaymentChange = (method) => {
+    setPaymentMethod(method);
+
+    // Reset Uberzol editing when switching away
+    if (method !== "Uberzol") {
+      setIsUberzolEdited(false);
+      setUberzolAmount("");
+    } else {
+      // When switching to Uberzol, set initial amount to subtotal
+      setUberzolAmount(subtotal.toFixed(2));
+      setIsUberzolEdited(false);
+    }
+  };
+
+  // ✅ Handle Uberzol amount change
+  const handleUberzolChange = (value) => {
+    setUberzolAmount(value);
+    setIsUberzolEdited(true);
+
+    // Update the display total
+    const numValue = parseFloat(value);
+    const subtotalEl = document.getElementById("cartSubtotal");
+    if (subtotalEl && !isNaN(numValue) && numValue >= 0) {
+      subtotalEl.textContent = `R${numValue.toFixed(2)}`;
+      subtotalEl.className = "total-amount uberzol";
+    }
+  };
+
+  // ✅ Reset Uberzol amount
+  const resetUberzol = () => {
+    setUberzolAmount(subtotal.toFixed(2));
+    setIsUberzolEdited(false);
+
+    const subtotalEl = document.getElementById("cartSubtotal");
+    if (subtotalEl) {
+      subtotalEl.textContent = `R${subtotal.toFixed(2)}`;
+      subtotalEl.className = "total-amount";
+    }
+
+    showToast("Uberzol Reset", "Subtotal reset to cart total.", "info");
   };
 
   const updateCartItem = (productId, updates) => {
@@ -79,6 +125,19 @@ export default function CartPanel({
     if (cart.length === 0) {
       showToast("Cart Empty", "Add at least one item to the cart.", "warning");
       return;
+    }
+
+    // ✅ Validate Uberzol amount
+    if (paymentMethod === "Uberzol") {
+      const amount = parseFloat(uberzolAmount);
+      if (isNaN(amount) || amount <= 0) {
+        showToast(
+          "Error",
+          "Please enter a valid Uberzol amount greater than 0.",
+          "error",
+        );
+        return;
+      }
     }
 
     const bundleItems = bundleSummary.items;
@@ -96,21 +155,53 @@ export default function CartPanel({
       };
     });
 
+    // ✅ Calculate totals with Uberzol adjustment
+    let total = calculateTotal();
+    let subtotalAmount = subtotal;
+
+    // If Uberzol, adjust line items proportionally
+    let finalItems = items;
+    if (paymentMethod === "Uberzol" && isUberzolEdited) {
+      const uberzolValue = parseFloat(uberzolAmount);
+      if (!isNaN(uberzolValue) && uberzolValue > 0) {
+        const proportionFactor = uberzolValue / subtotal;
+        finalItems = items.map((item) => ({
+          ...item,
+          lineTotal: item.lineTotal * proportionFactor,
+          customPrice: true,
+        }));
+        total = uberzolValue;
+        subtotalAmount = subtotal;
+      }
+    }
+
     // Generate unique ID
     const transactionId = crypto.randomUUID
       ? crypto.randomUUID()
       : `tx-${Date.now()}`;
 
+    // ✅ Build note with Uberzol info
+    let note = "";
+    if (paymentMethod === "Uberzol") {
+      const amount = parseFloat(uberzolAmount);
+      if (!isNaN(amount)) {
+        note = `Uberzol total: R${amount.toFixed(2)}`;
+        if (isUberzolEdited && amount !== subtotal) {
+          note += ` (adjusted from R${subtotal.toFixed(2)})`;
+        }
+      }
+    }
+
     const transaction = {
       id: transactionId,
       payment: paymentMethod,
-      total: calculateTotal(),
-      subtotal: subtotal,
+      total: total,
+      subtotal: subtotalAmount,
       discount: bundleSummary.discount || 0,
-      items: items,
+      items: finalItems,
       date: new Date().toISOString(),
-      note: paymentMethod === "Uberzol" ? `Uberzol total ${uberzolAmount}` : "",
-      itemCount: items.length,
+      note: note,
+      itemCount: finalItems.length,
     };
 
     // Update products (deduct stock)
@@ -124,14 +215,17 @@ export default function CartPanel({
     });
 
     try {
-      // Save to database
       await saveTransaction(transaction);
       await saveProducts(updatedProducts);
 
-      // Update state
       setProducts(updatedProducts);
       setTransactions([...(transactions || []), transaction]);
-      setCart([]); // Clear cart
+      setCart([]);
+
+      // Reset Uberzol state
+      setIsUberzolEdited(false);
+      setUberzolAmount("");
+
       setSyncStatus("Transaction recorded!");
       showToast(
         "Transaction Recorded",
@@ -143,6 +237,8 @@ export default function CartPanel({
       showToast("Error", "Failed to save transaction.", "error");
     }
   };
+
+  const displayedTotal = calculateTotal();
 
   return (
     <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
@@ -182,7 +278,6 @@ export default function CartPanel({
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {/* ✅ Minus button - will remove item if quantity becomes 0 */}
                     <button
                       className="rounded-full bg-slate-100 px-3 py-1 hover:bg-slate-200"
                       onClick={() => updateQuantity(item.productId, -1)}
@@ -198,7 +293,6 @@ export default function CartPanel({
                     >
                       +
                     </button>
-                    {/* ✅ Add remove button (X) */}
                     <button
                       className="ml-1 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700 hover:bg-rose-200"
                       onClick={() => removeItem(item.productId)}
@@ -296,7 +390,7 @@ export default function CartPanel({
           <select
             className="rounded-3xl border border-slate-200 bg-white px-4 py-2 text-sm"
             value={paymentMethod}
-            onChange={(event) => setPaymentMethod(event.target.value)}
+            onChange={(event) => handlePaymentChange(event.target.value)}
           >
             <option value="Cash">Cash</option>
             <option value="Yoco">Yoco</option>
@@ -304,22 +398,56 @@ export default function CartPanel({
             <option value="Uberzol">Uberzol</option>
           </select>
         </div>
+
+        {/* ✅ Uberzol Subtotal Input */}
         {paymentMethod === "Uberzol" && (
-          <div className="mb-4 rounded-3xl bg-white p-4">
-            <label className="text-sm text-slate-600">Uberzol Total</label>
-            <input
-              type="number"
-              className="mt-3 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3"
-              value={uberzolAmount}
-              onChange={(event) => setUberzolAmount(Number(event.target.value))}
-              min="0"
-              step="0.01"
-            />
+          <div className="mb-4 rounded-3xl bg-white p-4 border border-blue-200">
+            <label className="text-sm font-medium text-slate-600">
+              💳 Uberzol Total
+              <span className="ml-2 text-xs text-slate-400">
+                {isUberzolEdited ? "(custom)" : "(auto-calculated)"}
+              </span>
+            </label>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-lg font-semibold text-slate-600">R</span>
+              <input
+                type="number"
+                className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 focus:border-blue-400 focus:outline-none"
+                value={uberzolAmount}
+                onChange={(event) => handleUberzolChange(event.target.value)}
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+              />
+              <button
+                type="button"
+                className="rounded-3xl bg-slate-200 px-4 py-3 text-sm text-slate-700 hover:bg-slate-300"
+                onClick={resetUberzol}
+                title="Reset to cart total"
+              >
+                ⟳
+              </button>
+            </div>
+            {isUberzolEdited && (
+              <div className="mt-2 text-xs text-amber-600">
+                ⚠️ Custom amount set. Original total: R{subtotal.toFixed(2)}
+              </div>
+            )}
           </div>
         )}
+
         <div className="flex items-center justify-between text-sm text-slate-600">
           <span>Subtotal</span>
-          <strong>R{calculateTotal().toFixed(2)}</strong>
+          <strong
+            id="cartSubtotal"
+            className={
+              paymentMethod === "Uberzol" && isUberzolEdited
+                ? "text-blue-600"
+                : ""
+            }
+          >
+            R{displayedTotal.toFixed(2)}
+          </strong>
         </div>
         {bundleSummary.discount > 0 && (
           <div className="mt-2 flex items-center justify-between text-sm text-emerald-600">
@@ -334,7 +462,7 @@ export default function CartPanel({
         onClick={checkout}
         disabled={cart.length === 0}
       >
-        Checkout
+        Checkout {paymentMethod === "Uberzol" && "💳"}
       </button>
     </div>
   );

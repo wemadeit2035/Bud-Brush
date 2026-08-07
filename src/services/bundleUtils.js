@@ -44,6 +44,28 @@ export function getAvailableBundles(product, cartItems, products) {
     0,
   );
 
+  const customBundles = Array.isArray(product?.bundles) ? product.bundles : [];
+  customBundles.forEach((bundle, index) => {
+    const qty = Number(bundle.qty) || 0;
+    const price = Number(bundle.price) || 0;
+    if (qty <= 0) return;
+
+    bundles.push({
+      id: bundle.id || `custom-${product.id}-${index}`,
+      name:
+        bundle.name && bundle.name.trim().length > 0
+          ? bundle.name
+          : `Custom Bundle (${qty} for R${price})`,
+      price,
+      qty,
+      currentQty: cartQuantity,
+      isActive: cartQuantity >= qty,
+      type: "custom",
+      category: product.category,
+      productType: product.type,
+    });
+  });
+
   if (product.category === "Greenhouse" && product.type === "Pre-roll") {
     const currentQty = cartQuantity;
     bundles.push({

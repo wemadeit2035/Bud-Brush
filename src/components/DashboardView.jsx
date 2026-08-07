@@ -3,9 +3,11 @@ export default function DashboardView({ products, transactions }) {
     (sum, tx) => sum + (tx.total || 0),
     0,
   );
+  const paymentMethods = ["Cash", "Yoco", "EFT", "Uberzol"];
   const paymentTotals = transactions.reduce(
     (acc, tx) => {
-      acc[tx.payment] = (acc[tx.payment] || 0) + (tx.total || 0);
+      const paymentMethod = tx.payment || "Cash";
+      acc[paymentMethod] = (acc[paymentMethod] || 0) + (tx.total || 0);
       return acc;
     },
     { Cash: 0, Yoco: 0, EFT: 0, Uberzol: 0 },
@@ -32,37 +34,36 @@ export default function DashboardView({ products, transactions }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
           <div className="text-sm text-slate-500">Total Revenue</div>
           <div className="mt-4 text-3xl font-semibold">
             R{totalRevenue.toFixed(2)}
           </div>
         </div>
-        <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
-          <div className="text-sm text-slate-500">Cash</div>
-          <div className="mt-4 text-2xl font-semibold">
-            R{paymentTotals.Cash.toFixed(2)}
+        {paymentMethods.map((method) => (
+          <div
+            key={method}
+            className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200"
+          >
+            <div className="text-sm text-slate-500">{method}</div>
+            <div className="mt-4 text-2xl font-semibold">
+              R{paymentTotals[method].toFixed(2)}
+            </div>
           </div>
-        </div>
-        <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
-          <div className="text-sm text-slate-500">Yoco</div>
-          <div className="mt-4 text-2xl font-semibold">
-            R{paymentTotals.Yoco.toFixed(2)}
-          </div>
-        </div>
+        ))}
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
           <h3 className="mb-4 font-semibold">Payment Breakdown</h3>
           <div className="space-y-3">
-            {Object.entries(paymentTotals).map(([key, value]) => (
+            {paymentMethods.map((key) => (
               <div
                 key={key}
                 className="flex items-center justify-between text-sm text-slate-700"
               >
                 <span>{key}</span>
-                <strong>R{value.toFixed(2)}</strong>
+                <strong>R{paymentTotals[key].toFixed(2)}</strong>
               </div>
             ))}
           </div>

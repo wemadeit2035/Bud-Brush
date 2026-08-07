@@ -114,20 +114,6 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
               </div>
             </div>
             <div className="rounded-3xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Transactions</div>
-              <div className="mt-2 text-xl font-semibold">
-                {selectedArchive.transaction_count || 0}
-              </div>
-            </div>
-            <div className="rounded-3xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Items Sold</div>
-              <div className="mt-2 text-xl font-semibold">
-                {selectedArchive.item_count ||
-                  selectedArchive.data?.summary?.itemCount ||
-                  0}
-              </div>
-            </div>
-            <div className="rounded-3xl bg-slate-50 p-4">
               <div className="text-sm text-slate-500">Cash Total</div>
               <div className="mt-2 text-xl font-semibold">
                 {currency(
@@ -137,6 +123,67 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
                 )}
               </div>
             </div>
+            <div className="rounded-3xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">EFT Total</div>
+              <div className="mt-2 text-xl font-semibold">
+                {currency(
+                  selectedArchive.data?.summary?.eftTotal ||
+                    selectedArchive.eft_total ||
+                    0,
+                )}
+              </div>
+            </div>
+            <div className="rounded-3xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Yoco Total</div>
+              <div className="mt-2 text-xl font-semibold">
+                {currency(
+                  selectedArchive.data?.summary?.yocoTotal ||
+                    selectedArchive.yoco_total ||
+                    0,
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-slate-700">
+                Day Adjustments
+              </h4>
+              <span className="text-xs text-slate-500">
+                {selectedArchive.data?.summary?.adjustments?.length || 0}{" "}
+                entries
+              </span>
+            </div>
+            {selectedArchive.data?.summary?.adjustments?.length > 0 ? (
+              <div className="space-y-2">
+                {selectedArchive.data.summary.adjustments.map((adjustment) => (
+                  <div
+                    key={adjustment.id}
+                    className="flex items-start justify-between gap-4 rounded-2xl bg-white px-4 py-3"
+                  >
+                    <div>
+                      <div className="font-semibold text-slate-800">
+                        {adjustment.amount > 0 ? "+" : ""}
+                        {currency(adjustment.amount)}
+                      </div>
+                      <div className="text-sm text-slate-500">
+                        {adjustment.note || "No note"}
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {adjustment.createdAt
+                        ? new Date(adjustment.createdAt).toLocaleString()
+                        : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-slate-500">
+                No adjustments were saved for this day.
+              </div>
+            )}
           </div>
 
           <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200">
@@ -145,8 +192,7 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
                 <tr>
                   <th className="px-4 py-3">Payment</th>
                   <th className="px-4 py-3">Total</th>
-                  <th className="px-4 py-3">Items</th>
-                  <th className="px-4 py-3">Note</th>
+                  <th className="px-4 py-3">Item Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -154,8 +200,17 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
                   <tr key={index} className="border-t border-slate-200">
                     <td className="px-4 py-4">{tx.payment}</td>
                     <td className="px-4 py-4">{currency(tx.total)}</td>
-                    <td className="px-4 py-4">{tx.items?.length || 0}</td>
-                    <td className="px-4 py-4">{tx.note || "—"}</td>
+                    <td className="px-4 py-4">
+                      {tx.items?.length > 0
+                        ? tx.items
+                            .map((item) => {
+                              const quantity = item.quantity || 0;
+                              const name = item.productName || "Item";
+                              return `${name} x${quantity}`;
+                            })
+                            .join(", ")
+                        : tx.note || "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

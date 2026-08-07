@@ -23,6 +23,21 @@ function App() {
   const [transactions, setTransactions] = useState([]);
   const [cart, setCart] = useState([]);
   const [archives, setArchives] = useState([]);
+  const [dailyAdjustments, setDailyAdjustments] = useState(() => {
+    try {
+      const raw = localStorage.getItem("budbrush_daily_adjustments");
+      if (!raw) return [];
+
+      const parsed = JSON.parse(raw);
+      const today = new Date().toISOString().slice(0, 10);
+      return parsed?.date === today && Array.isArray(parsed.adjustments)
+        ? parsed.adjustments
+        : [];
+    } catch (error) {
+      console.error("Failed to load daily adjustments:", error);
+      return [];
+    }
+  });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [syncStatus, setSyncStatus] = useState("Connecting...");
   const [toast, setToast] = useState(null);
@@ -35,6 +50,20 @@ function App() {
   const currency = (value) => {
     return `R${Number(value || 0).toFixed(2)}`;
   };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "budbrush_daily_adjustments",
+        JSON.stringify({
+          date: new Date().toISOString().slice(0, 10),
+          adjustments: dailyAdjustments,
+        }),
+      );
+    } catch (error) {
+      console.error("Failed to save daily adjustments:", error);
+    }
+  }, [dailyAdjustments]);
 
   const loadArchiveData = async () => {
     const loadedArchives = await loadArchives();
@@ -78,6 +107,10 @@ function App() {
       (sum, tx) => sum + (tx.itemCount || tx.items?.length || 0),
       0,
     );
+    const adjustmentTotal = dailyAdjustments.reduce(
+      (sum, adjustment) => sum + (Number(adjustment.amount) || 0),
+      0,
+    );
 
     const archiveData = {
       transactions: dayTransactions,
@@ -89,6 +122,8 @@ function App() {
         uberzolTotal,
         transactionCount: dayTransactions.length,
         itemCount,
+        adjustmentTotal,
+        adjustments: dailyAdjustments,
       },
     };
 
@@ -177,6 +212,7 @@ function App() {
 
       setTransactions(updatedTransactions);
       await saveTransactions(updatedTransactions);
+      setDailyAdjustments([]);
 
       showToast(
         "✅ Day Archived & Cleared!",
@@ -266,6 +302,8 @@ function App() {
                 products={products}
                 transactions={transactions}
                 setTransactions={setTransactions}
+                dailyAdjustments={dailyAdjustments}
+                setDailyAdjustments={setDailyAdjustments}
                 showToast={showToast}
               />
             )}

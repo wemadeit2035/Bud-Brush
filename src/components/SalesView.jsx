@@ -12,15 +12,20 @@ export default function SalesView({
   setTransactions,
   setProducts,
   showToast,
+  dailyAdjustments = [],
+  setDailyAdjustments,
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [editingTransaction, setEditingTransaction] = useState(null);
-
-  // ✅ State for total adjustment (matches original)
-  const [adjustmentAmount, setAdjustmentAmount] = useState(0);
+  const [adjustmentAmount, setAdjustmentAmount] = useState("0");
   const [adjustmentNote, setAdjustmentNote] = useState("");
   const [showAdjustment, setShowAdjustment] = useState(false);
+
+  const parsedAdjustmentAmount = useMemo(() => {
+    const amount = Number(adjustmentAmount);
+    return Number.isFinite(amount) ? amount : 0;
+  }, [adjustmentAmount]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -33,15 +38,20 @@ export default function SalesView({
     });
   }, [filter, search, transactions]);
 
-  // ✅ Calculate total from filtered transactions
   const totalSum = useMemo(() => {
     return filtered.reduce((sum, tx) => sum + (tx.total || 0), 0);
   }, [filtered]);
 
-  // ✅ Calculate adjusted total
+  const adjustmentTotal = useMemo(() => {
+    return dailyAdjustments.reduce(
+      (sum, adjustment) => sum + (Number(adjustment.amount) || 0),
+      0,
+    );
+  }, [dailyAdjustments]);
+
   const adjustedTotal = useMemo(() => {
-    return totalSum + adjustmentAmount;
-  }, [totalSum, adjustmentAmount]);
+    return totalSum + adjustmentTotal;
+  }, [totalSum, adjustmentTotal]);
 
   const exportSalesCsv = () => {
     const rows = [
@@ -67,7 +77,6 @@ export default function SalesView({
     showToast("Exported", "Sales CSV downloaded.", "success");
   };
 
-  // ✅ Format item details with tags and price strikethrough
   const formatItemDetails = (item) => {
     let tags = "";
     let priceDisplay = "";
@@ -76,14 +85,12 @@ export default function SalesView({
     const paidPrice = item.lineTotal;
     const priceDiff = originalTotal - paidPrice;
 
-    // ✅ Add tags based on item properties
     if (item.customPrice) {
       tags += " ✏️";
     }
+
     if (item.isBundle) {
       tags += " 🎯";
-
-      // Check which bundle type
       if (item.bundleType?.includes("Greenhouse PR")) {
         tags += " 🌿";
       } else if (item.bundleType?.includes("Indoor PR")) {
@@ -95,7 +102,6 @@ export default function SalesView({
       }
     }
 
-    // ✅ Price display with strikethrough if discounted
     if (paidPrice !== originalTotal) {
       const isDiscount = priceDiff > 0;
       const diffAmount = Math.abs(priceDiff);
@@ -107,7 +113,6 @@ export default function SalesView({
           <span class="text-xs text-emerald-600">(-R${diffAmount.toFixed(2)})</span>
         `;
       } else {
-        // Markup case (custom price higher than original)
         priceDisplay = `
           <span class="line-through text-slate-400">R${originalTotal.toFixed(2)}</span>
           <span class="font-bold text-amber-600">R${paidPrice.toFixed(2)}</span>
@@ -128,7 +133,6 @@ export default function SalesView({
     };
   };
 
-  // ✅ Calculate transaction totals
   const calculateTransactionTotals = (tx) => {
     let subtotal = 0;
     let total = 0;
@@ -150,40 +154,82 @@ export default function SalesView({
     return { subtotal, total, totalDiscount, discountedItems };
   };
 
-  // ✅ Handle adjustment
-  const handleApplyAdjustment = () => {
-    if (adjustmentAmount === 0) {
-      setShowAdjustment(false);
+  const handleAddAdjustment = () => {
+    if (!setDailyAdjustments) {
       showToast(
-        "Adjustment Removed",
-        "Total adjustment has been cleared.",
-        "info",
+        "Adjustments Unavailable",
+        "Daily adjustments could not be saved in this session.",
+        "error",
       );
       return;
     }
 
+    if (adjustmentAmount.trim() === "") {
+      showToast(
+        "Invalid Adjustment",
+        "Enter an amount before adding the adjustment.",
+        "warning",
+      );
+      return;
+    }
+
+    if (!adjustmentNote.trim()) {
+      showToast(
+        "Note Required",
+        "Add a note for each adjustment entry.",
+        "warning",
+      );
+      return;
+    }
+
+    if (parsedAdjustmentAmount === 0) {
+      showToast(
+        "Invalid Adjustment",
+        "Adjustment amount cannot be zero.",
+        "warning",
+      );
+      return;
+    }
+
+    const newAdjustment = {
+      id:
+        typeof crypto?.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `adj-${Date.now()}`,
+      amount: parsedAdjustmentAmount,
+      note: adjustmentNote.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    setDailyAdjustments((currentAdjustments) => [
+      ...currentAdjustments,
+      newAdjustment,
+    ]);
+    setAdjustmentAmount("0");
+    setAdjustmentNote("");
     setShowAdjustment(true);
-    const action = adjustmentAmount > 0 ? "Added" : "Deducted";
+
     showToast(
-      "Adjustment Applied",
-      `${action} R${Math.abs(adjustmentAmount).toFixed(2)}${adjustmentNote ? ": " + adjustmentNote : ""}. New total: R${adjustedTotal.toFixed(2)}`,
+      "Adjustment Added",
+      `${parsedAdjustmentAmount > 0 ? "Added" : "Deducted"} R${Math.abs(parsedAdjustmentAmount).toFixed(2)}: ${newAdjustment.note}`,
       "success",
     );
   };
 
-  const handleCancelAdjustment = () => {
-    setShowAdjustment(false);
-    setAdjustmentAmount(0);
-    setAdjustmentNote("");
+  const handleRemoveAdjustment = (adjustmentId) => {
+    if (!setDailyAdjustments) return;
+
+    setDailyAdjustments((currentAdjustments) =>
+      currentAdjustments.filter((adjustment) => adjustment.id !== adjustmentId),
+    );
+    showToast("Adjustment Removed", "Removed adjustment entry.", "info");
   };
 
   const handleEditClick = (transaction) => {
-    console.log("✏️ Editing transaction:", transaction.id);
     setEditingTransaction(transaction);
   };
 
   const handleEditSave = (updatedTransaction) => {
-    console.log("💾 Updated transaction:", updatedTransaction.id);
     const updatedTransactions = transactions.map((tx) =>
       tx.id === updatedTransaction.id ? updatedTransaction : tx,
     );
@@ -193,8 +239,6 @@ export default function SalesView({
   };
 
   const handleDeleteTransaction = async (transactionId) => {
-    console.log(`🗑️ Deleting transaction ${transactionId}...`);
-
     try {
       const transaction = transactions.find((tx) => tx.id === transactionId);
 
@@ -219,7 +263,7 @@ export default function SalesView({
         await saveProducts(updatedProducts);
       }
 
-      const result = await deleteTransactionFromDb(transactionId);
+      await deleteTransactionFromDb(transactionId);
 
       const updatedTransactions = transactions.filter(
         (tx) => tx.id !== transactionId,
@@ -240,7 +284,6 @@ export default function SalesView({
     }
   };
 
-  // ✅ Get payment badge class
   const getPaymentBadgeClass = (payment) => {
     const classes = {
       Cash: "bg-emerald-100 text-emerald-700",
@@ -347,8 +390,8 @@ export default function SalesView({
                           })}
                         </div>
                         {totalDiscount > 0 && (
-                          <div className="mt-2 text-xs text-emerald-600 font-semibold">
-                            💸 Discount: -R{totalDiscount.toFixed(2)}(
+                          <div className="mt-2 text-xs font-semibold text-emerald-600">
+                            💸 Discount: -R{totalDiscount.toFixed(2)} (
                             {discountedItems} item
                             {discountedItems > 1 ? "s" : ""})
                           </div>
@@ -404,9 +447,8 @@ export default function SalesView({
                 })
               )}
             </tbody>
-            {/* ✅ TFOOT - Sales Total Row */}
             {filtered.length > 0 && (
-              <tfoot className="bg-slate-50 border-t-2 border-slate-300">
+              <tfoot className="border-t-2 border-slate-300 bg-slate-50">
                 <tr>
                   <td
                     colSpan="4"
@@ -422,91 +464,27 @@ export default function SalesView({
                   <td className="px-4 py-3">
                     <button
                       className="rounded-2xl border border-slate-200 bg-white px-3 py-1 text-xs hover:bg-slate-100"
-                      onClick={() => setShowAdjustment(!showAdjustment)}
+                      onClick={() => setShowAdjustment((current) => !current)}
                     >
                       {showAdjustment ? "Hide" : "Adjust"}
                     </button>
                   </td>
                 </tr>
-                {/* ✅ Adjustment Row */}
-                {showAdjustment && (
-                  <tr className="bg-amber-50 border-t border-amber-200">
-                    <td colSpan="3" className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-amber-700">
-                          Adjustment:
-                        </span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="w-32 rounded-2xl border border-amber-300 bg-white px-3 py-1 text-sm"
-                          value={adjustmentAmount}
-                          onChange={(e) =>
-                            setAdjustmentAmount(parseFloat(e.target.value) || 0)
-                          }
-                          placeholder="0.00"
-                        />
-                        <input
-                          type="text"
-                          className="w-40 rounded-2xl border border-amber-300 bg-white px-3 py-1 text-sm"
-                          value={adjustmentNote}
-                          onChange={(e) => setAdjustmentNote(e.target.value)}
-                          placeholder="Note (optional)"
-                        />
-                      </div>
-                    </td>
-                    <td colSpan="2" className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">
-                          Adjusted Total:
-                        </span>
-                        <span className="font-bold text-amber-700">
-                          R{adjustedTotal.toFixed(2)}
-                        </span>
-                        {adjustmentAmount !== 0 && (
-                          <span className="text-xs text-amber-600">
-                            ({adjustmentAmount > 0 ? "+" : ""}
-                            {adjustmentAmount.toFixed(2)})
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        <button
-                          className="rounded-2xl bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-700"
-                          onClick={handleApplyAdjustment}
-                        >
-                          Apply
-                        </button>
-                        <button
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-1 text-xs hover:bg-slate-100"
-                          onClick={handleCancelAdjustment}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-                {/* ✅ Adjusted Total Row (when adjustment is applied) */}
-                {showAdjustment && adjustmentAmount !== 0 && (
-                  <tr className="bg-emerald-50 border-t border-emerald-200">
+                {adjustmentTotal !== 0 && (
+                  <tr className="border-t border-emerald-200 bg-emerald-50">
                     <td
                       colSpan="4"
                       className="px-4 py-3 text-right font-bold text-emerald-700"
                     >
-                      ADJUSTED TOTAL:
+                      ADJUSTMENTS TOTAL:
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-bold text-emerald-700">
-                        R{adjustedTotal.toFixed(2)}
+                        R{adjustmentTotal.toFixed(2)}
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-emerald-600">
-                        {adjustmentNote || "Manual adjustment"}
-                      </span>
+                    <td className="px-4 py-3 text-xs text-emerald-600">
+                      {dailyAdjustments.length} entries
                     </td>
                   </tr>
                 )}
@@ -514,10 +492,120 @@ export default function SalesView({
             )}
           </table>
         </div>
+
+        {(showAdjustment || dailyAdjustments.length > 0) && (
+          <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-amber-800">
+                  Daily Adjustments
+                </h3>
+                <p className="text-sm text-amber-700">
+                  Add multiple amounts and save each one with its own note.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-100"
+                onClick={() => setShowAdjustment((current) => !current)}
+              >
+                {showAdjustment ? "Hide Form" : "Show Form"}
+              </button>
+            </div>
+
+            {showAdjustment && (
+              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end">
+                <div className="flex-1">
+                  <label className="mb-2 block text-sm font-medium text-amber-700">
+                    Adjustment Amount
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="w-full rounded-2xl border border-amber-300 bg-white px-3 py-2 text-sm"
+                    value={adjustmentAmount}
+                    onChange={(event) =>
+                      setAdjustmentAmount(event.target.value)
+                    }
+                    placeholder="Use a minus sign to deduct"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-2 block text-sm font-medium text-amber-700">
+                    Note for this adjustment
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full rounded-2xl border border-amber-300 bg-white px-3 py-2 text-sm"
+                    value={adjustmentNote}
+                    onChange={(event) => setAdjustmentNote(event.target.value)}
+                    placeholder="Reason for the adjustment"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700"
+                    onClick={handleAddAdjustment}
+                  >
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-100"
+                    onClick={() => setShowAdjustment(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {dailyAdjustments.length > 0 ? (
+              <div className="space-y-3">
+                {dailyAdjustments.map((adjustment) => (
+                  <div
+                    key={adjustment.id}
+                    className="flex flex-col gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <div className="font-semibold text-slate-800">
+                        {adjustment.amount > 0 ? "+" : ""}R
+                        {Number(adjustment.amount || 0).toFixed(2)}
+                      </div>
+                      <div className="text-sm text-slate-500">
+                        {adjustment.note || "No note"}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 hover:bg-rose-100"
+                      onClick={() => handleRemoveAdjustment(adjustment.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3">
+                  <span className="text-sm font-medium text-slate-600">
+                    Adjusted Total
+                  </span>
+                  <strong className="text-emerald-700">
+                    R{adjustedTotal.toFixed(2)}
+                  </strong>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-500">
+                No adjustments added yet.
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
       <PreRollSummary products={products} transactions={transactions} />
 
-      {/* Edit Transaction Modal */}
       {editingTransaction && (
         <EditTransactionModal
           transaction={editingTransaction}

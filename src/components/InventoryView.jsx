@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react";
 import { saveProducts } from "../services/database";
 
+const createEmptyBundle = () => ({
+  id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+  name: "",
+  qty: "",
+  price: "",
+});
+
 export default function InventoryView({ products, setProducts, showToast }) {
   const [search, setSearch] = useState("");
   const [editingProduct, setEditingProduct] = useState(null);
@@ -10,6 +17,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
     type: "",
     price: "",
     stock: "",
+    bundles: [],
   });
 
   const filteredProducts = useMemo(() => {
@@ -23,7 +31,14 @@ export default function InventoryView({ products, setProducts, showToast }) {
 
   const resetForm = () => {
     setEditingProduct(null);
-    setFormState({ name: "", category: "", type: "", price: "", stock: "" });
+    setFormState({
+      name: "",
+      category: "",
+      type: "",
+      price: "",
+      stock: "",
+      bundles: [],
+    });
   };
 
   const handleEdit = (product) => {
@@ -34,7 +49,40 @@ export default function InventoryView({ products, setProducts, showToast }) {
       type: product.type,
       price: product.price,
       stock: product.stock,
+      bundles: Array.isArray(product.bundles)
+        ? product.bundles.map((bundle) => ({
+            id:
+              bundle.id ||
+              `${bundle.qty || "qty"}-${bundle.price || "price"}-${Math.random().toString(36).slice(2, 6)}`,
+            name: bundle.name || "",
+            qty: String(bundle.qty ?? ""),
+            price: String(bundle.price ?? ""),
+          }))
+        : [],
     });
+  };
+
+  const updateBundleField = (bundleId, field, value) => {
+    setFormState((current) => ({
+      ...current,
+      bundles: current.bundles.map((bundle) =>
+        bundle.id === bundleId ? { ...bundle, [field]: value } : bundle,
+      ),
+    }));
+  };
+
+  const addBundleField = () => {
+    setFormState((current) => ({
+      ...current,
+      bundles: [...current.bundles, createEmptyBundle()],
+    }));
+  };
+
+  const removeBundleField = (bundleId) => {
+    setFormState((current) => ({
+      ...current,
+      bundles: current.bundles.filter((bundle) => bundle.id !== bundleId),
+    }));
   };
 
   const handleDelete = async (productId) => {
@@ -52,6 +100,32 @@ export default function InventoryView({ products, setProducts, showToast }) {
       return;
     }
 
+    const cleanedBundles = (formState.bundles || [])
+      .filter((bundle) => bundle.qty !== "" || bundle.price !== "")
+      .map((bundle) => ({
+        id: bundle.id,
+        name: (bundle.name || "").trim(),
+        qty: Number(bundle.qty),
+        price: Number(bundle.price),
+      }));
+
+    const hasInvalidBundle = cleanedBundles.some(
+      (bundle) =>
+        Number.isNaN(bundle.qty) ||
+        Number.isNaN(bundle.price) ||
+        bundle.qty <= 0 ||
+        bundle.price < 0,
+    );
+
+    if (hasInvalidBundle) {
+      showToast(
+        "Validation",
+        "Bundle rules must have a quantity greater than 0 and a valid price.",
+        "warning",
+      );
+      return;
+    }
+
     const newProduct = {
       id: editingProduct || Date.now().toString(),
       name: formState.name,
@@ -59,6 +133,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
       type: formState.type,
       price: Number(formState.price) || 0,
       stock: Number(formState.stock) || 0,
+      bundles: cleanedBundles,
     };
 
     const updated = editingProduct
@@ -232,6 +307,91 @@ export default function InventoryView({ products, setProducts, showToast }) {
                 }
                 required
               />
+            </div>
+          </div>
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <label className="text-sm font-semibold text-slate-700">
+                Bundle Rules
+              </label>
+              <button
+                type="button"
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+                onClick={addBundleField}
+              >
+                Add Bundle
+              </button>
+            </div>
+            <div className="space-y-3">
+              {formState.bundles.length === 0 ? (
+                <div className="text-xs text-slate-500">
+                  No bundle rules yet. Add one to offer deals like 3 for R150.
+                </div>
+              ) : (
+                formState.bundles.map((bundle, index) => (
+                  <div
+                    key={bundle.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-3"
+                  >
+                    <div className="mb-2 text-xs font-semibold text-slate-500">
+                      Bundle {index + 1}
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      <input
+                        type="text"
+                        placeholder="Bundle name (optional)"
+                        className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                        value={bundle.name}
+                        onChange={(event) =>
+                          updateBundleField(
+                            bundle.id,
+                            "name",
+                            event.target.value,
+                          )
+                        }
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Qty"
+                        className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                        value={bundle.qty}
+                        onChange={(event) =>
+                          updateBundleField(
+                            bundle.id,
+                            "qty",
+                            event.target.value,
+                          )
+                        }
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Bundle price"
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                          value={bundle.price}
+                          onChange={(event) =>
+                            updateBundleField(
+                              bundle.id,
+                              "price",
+                              event.target.value,
+                            )
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+                          onClick={() => removeBundleField(bundle.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
           <div className="flex gap-3">
