@@ -164,7 +164,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
         <div className="mb-4">
           <input
             type="text"
-            placeholder="🔍 Search inventory..."
+            placeholder="Search inventory..."
             className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 focus:border-sky-400"
             value={search}
             onChange={(event) => setSearch(event.target.value)}

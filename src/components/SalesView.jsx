@@ -86,19 +86,19 @@ export default function SalesView({
     const priceDiff = originalTotal - paidPrice;
 
     if (item.customPrice) {
-      tags += " ✏️";
+      tags += ' <i class="fa fa-pen-to-square"></i>';
     }
 
     if (item.isBundle) {
-      tags += " 🎯";
+      tags += ' <i class="fa fa-bullseye"></i>';
       if (item.bundleType?.includes("Greenhouse PR")) {
-        tags += " 🌿";
+        tags += ' <i class="fa fa-seedling"></i>';
       } else if (item.bundleType?.includes("Indoor PR")) {
-        tags += " 🏠";
+        tags += ' <i class="fa fa-home"></i>';
       } else if (item.bundleType?.includes("Greenhouse Bud")) {
-        tags += " 🌿";
+        tags += ' <i class="fa fa-seedling"></i>';
       } else if (item.bundleType?.includes("Indoor Bud")) {
-        tags += " 🏠";
+        tags += ' <i class="fa fa-home"></i>';
       }
     }
 
@@ -307,7 +307,7 @@ export default function SalesView({
           <div className="flex flex-wrap gap-2">
             <input
               type="text"
-              placeholder="🔍 Search..."
+              placeholder="Search..."
               className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 focus:border-sky-400"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -391,7 +391,8 @@ export default function SalesView({
                         </div>
                         {totalDiscount > 0 && (
                           <div className="mt-2 text-xs font-semibold text-emerald-600">
-                            💸 Discount: -R{totalDiscount.toFixed(2)} (
+                            <i className="fa fa-tags me-1" />
+                            Discount: -R{totalDiscount.toFixed(2)} (
                             {discountedItems} item
                             {discountedItems > 1 ? "s" : ""})
                           </div>

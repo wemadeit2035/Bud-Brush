@@ -171,17 +171,52 @@ export async function saveProducts(products) {
   // Always save to localStorage as backup
   writeLocalStorage(PRODUCTS_KEY, normalizedProducts);
 
-  if (supabase && normalizedProducts.length > 0) {
+  if (supabase) {
     try {
-      const { error } = await supabase
+      // Keep Supabase aligned with the current client list:
+      // upsert current products, remove products no longer present.
+      const { data: existingRows, error: existingError } = await supabase
         .from("products")
-        .upsert(normalizedProducts, { onConflict: "id" });
+        .select("id");
 
-      if (error) {
-        console.error("Supabase upsert error:", error);
-        throw error;
+      if (existingError) {
+        console.error("Supabase product read error:", existingError);
+        throw existingError;
       }
-      console.log(`✅ Saved ${normalizedProducts.length} products to Supabase`);
+
+      const incomingIds = new Set(
+        normalizedProducts.map((product) => product.id),
+      );
+      const staleIds = (existingRows || [])
+        .map((row) => String(row.id))
+        .filter((id) => !incomingIds.has(id));
+
+      if (normalizedProducts.length > 0) {
+        const { error } = await supabase
+          .from("products")
+          .upsert(normalizedProducts, { onConflict: "id" });
+
+        if (error) {
+          console.error("Supabase upsert error:", error);
+          throw error;
+        }
+      }
+
+      if (staleIds.length > 0) {
+        const { error: deleteError } = await supabase
+          .from("products")
+          .delete()
+          .in("id", staleIds);
+
+        if (deleteError) {
+          console.error("Supabase delete error:", deleteError);
+          throw deleteError;
+        }
+      }
+
+      console.log(
+        `✅ Synced ${normalizedProducts.length} products to Supabase (${staleIds.length} deleted)`,
+      );
       return true;
     } catch (error) {
       console.error("Failed to save products to Supabase:", error);

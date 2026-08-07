@@ -22,10 +22,8 @@ export default function LoginOverlay({ visible, onAuthenticate }) {
           <img
             src="/b-b.png"
             alt="Bud & Brush"
-            className="mx-auto mb-4 h-20 w-20 rounded-3xl object-cover"
+            className="mx-auto mb-4 h-20 w-20 object-cover"
           />
-          <h1 className="text-3xl font-semibold">Bud & Brush</h1>
-          <p className="text-slate-500">Point of Sale System</p>
         </div>
         <div className="space-y-4">
           <input

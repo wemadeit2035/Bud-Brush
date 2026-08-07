@@ -70,7 +70,7 @@ export function getAvailableBundles(product, cartItems, products) {
     const currentQty = cartQuantity;
     bundles.push({
       id: "greenhouse-pr-3",
-      name: `🌿 Greenhouse PR Special (3 for R150)`,
+      name: `Greenhouse PR Special (3 for R150)`,
       price: 150,
       qty: 3,
       currentQty,
@@ -85,7 +85,7 @@ export function getAvailableBundles(product, cartItems, products) {
     const currentQty = cartQuantity;
     bundles.push({
       id: "greenhouse-flower-5",
-      name: `🌿 Greenhouse Bud Special (5g for R250)`,
+      name: `Greenhouse Bud Special (5g for R250)`,
       price: 250,
       qty: 5,
       currentQty,
@@ -105,7 +105,7 @@ export function getAvailableBundles(product, cartItems, products) {
     const currentQty = cartQuantity;
     bundles.push({
       id: "indoor-pr-3",
-      name: `🏠 Indoor PR Special (3 for R300)`,
+      name: `Indoor PR Special (3 for R300)`,
       price: 300,
       qty: 3,
       currentQty,
@@ -125,7 +125,7 @@ export function getAvailableBundles(product, cartItems, products) {
     const currentQty = cartQuantity;
     bundles.push({
       id: "indoor-flower-5",
-      name: `🏠 Indoor Bud Special (5g for R400)`,
+      name: `Indoor Bud Special (5g for R400)`,
       price: 400,
       qty: 5,
       currentQty,
@@ -183,14 +183,14 @@ export function applyCartBundles(cartItems, products) {
         product.category === "Greenhouse" && product.type === "Pre-roll",
       bundleQty: 3,
       bundlePrice: 150,
-      name: "🌿 Greenhouse PR Special",
+      name: "Greenhouse PR Special",
     },
     {
       match: (product) =>
         product.category === "Greenhouse" && product.type === "Flower",
       bundleQty: 5,
       bundlePrice: 250,
-      name: "🌿 Greenhouse Bud Special",
+      name: "Greenhouse Bud Special",
     },
     {
       match: (product) =>
@@ -200,7 +200,7 @@ export function applyCartBundles(cartItems, products) {
         product.type === "Pre-roll",
       bundleQty: 3,
       bundlePrice: 300,
-      name: "🏠 Indoor PR Special",
+      name: "Indoor PR Special",
     },
     {
       match: (product) =>
@@ -210,7 +210,7 @@ export function applyCartBundles(cartItems, products) {
         product.type === "Flower",
       bundleQty: 5,
       bundlePrice: 400,
-      name: "🏠 Indoor Bud Special",
+      name: "Indoor Bud Special",
     },
   ];
 

@@ -36,18 +36,18 @@ export default function ProductGrid({ products, cart, setCart }) {
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <input
           type="text"
-          placeholder="🔍 Search products..."
+          placeholder="Search products..."
           className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 focus:border-sky-400"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
         <div className="flex flex-wrap gap-2">
           {[
-            { value: "all", label: "All" },
-            { value: "pre-roll", label: "🌿 Pre-roll" },
-            { value: "flower", label: "🌸 Flower" },
-            { value: "indoor", label: "🔥 Indoor" },
-            { value: "greenhouse", label: "🏠 Greenhouse" },
+            { value: "all", label: "All", icon: "fa-th-large" },
+            { value: "pre-roll", label: "Pre-roll", icon: "fa-seedling" },
+            { value: "flower", label: "Flower", icon: "fa-cannabis" },
+            { value: "indoor", label: "Indoor", icon: "fa-fire" },
+            { value: "greenhouse", label: "Greenhouse", icon: "fa-home" },
           ].map((option) => (
             <button
               key={option.value}
@@ -59,6 +59,7 @@ export default function ProductGrid({ products, cart, setCart }) {
               }`}
               onClick={() => setFilter(option.value)}
             >
+              <i className={`fa ${option.icon} me-2`} />
               {option.label}
             </button>
           ))}

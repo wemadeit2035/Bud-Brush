@@ -1,4 +1,4 @@
-export default function TabNav({ activeView, onChangeView }) {
+export default function TabNav({ activeView, onChangeView, onClearDay }) {
   const tabs = [
     { id: "pos", label: "POS", icon: "fa-cash-register" },
     { id: "inventory", label: "Inventory", icon: "fa-boxes" },
@@ -30,6 +30,7 @@ export default function TabNav({ activeView, onChangeView }) {
       <button
         className="ml-auto rounded-full bg-rose-100 px-4 py-2 text-sm font-semibold text-rose-700"
         type="button"
+        onClick={onClearDay}
       >
         <i className="fa fa-trash-alt me-2" />
         Clear Day

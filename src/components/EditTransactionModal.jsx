@@ -115,7 +115,10 @@ export default function EditTransactionModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
       <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">✏️ Edit Transaction</h2>
+          <h2 className="text-xl font-semibold">
+            <i className="fa fa-pen-to-square me-2" />
+            Edit Transaction
+          </h2>
           <button
             onClick={onClose}
             className="rounded-full p-2 hover:bg-slate-100"
@@ -219,8 +222,8 @@ export default function EditTransactionModal({
                       />
                       {isCustomPrice && (
                         <div className="mt-1 text-xs text-amber-600">
-                          ✏️ Custom price (original: R{originalTotal.toFixed(2)}
-                          )
+                          <i className="fa fa-pen-to-square me-1" />
+                          Custom price (original: R{originalTotal.toFixed(2)})
                         </div>
                       )}
                     </div>

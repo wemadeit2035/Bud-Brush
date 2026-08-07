@@ -276,7 +276,11 @@ function App() {
             onNewDay={clearTodaySalesWithArchive}
             onViewArchives={() => setActiveView("archive")}
           />
-          <TabNav activeView={activeView} onChangeView={setActiveView} />
+          <TabNav
+            activeView={activeView}
+            onChangeView={setActiveView}
+            onClearDay={clearTodaySalesWithArchive}
+          />
           <div>
             {activeView === "pos" && (
               <POSView

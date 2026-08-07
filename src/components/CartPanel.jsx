@@ -243,7 +243,10 @@ export default function CartPanel({
   return (
     <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">🛒 Cart</h2>
+        <h2 className="text-lg font-semibold">
+          <i className="fa fa-shopping-cart me-2" />
+          Cart
+        </h2>
         <span className="text-sm text-slate-500">{cart.length} items</span>
       </div>
       <div className="space-y-4">
@@ -297,7 +300,7 @@ export default function CartPanel({
                       className="ml-1 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700 hover:bg-rose-200"
                       onClick={() => removeItem(item.productId)}
                     >
-                      ✕
+                      <i className="fa fa-times" />
                     </button>
                   </div>
                 </div>
@@ -403,7 +406,8 @@ export default function CartPanel({
         {paymentMethod === "Uberzol" && (
           <div className="mb-4 rounded-3xl bg-white p-4 border border-blue-200">
             <label className="text-sm font-medium text-slate-600">
-              💳 Uberzol Total
+              <i className="fa fa-credit-card me-2" />
+              Uberzol Total
               <span className="ml-2 text-xs text-slate-400">
                 {isUberzolEdited ? "(custom)" : "(auto-calculated)"}
               </span>
@@ -425,12 +429,13 @@ export default function CartPanel({
                 onClick={resetUberzol}
                 title="Reset to cart total"
               >
-                ⟳
+                <i className="fa fa-rotate-left" />
               </button>
             </div>
             {isUberzolEdited && (
               <div className="mt-2 text-xs text-amber-600">
-                ⚠️ Custom amount set. Original total: R{subtotal.toFixed(2)}
+                <i className="fa fa-triangle-exclamation me-1" />
+                Custom amount set. Original total: R{subtotal.toFixed(2)}
               </div>
             )}
           </div>
@@ -462,7 +467,10 @@ export default function CartPanel({
         onClick={checkout}
         disabled={cart.length === 0}
       >
-        Checkout {paymentMethod === "Uberzol" && "💳"}
+        Checkout{" "}
+        {paymentMethod === "Uberzol" && (
+          <i className="fa fa-credit-card ms-1" />
+        )}
       </button>
     </div>
   );

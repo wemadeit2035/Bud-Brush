@@ -5,12 +5,8 @@ export default function TopBar({ syncStatus, onNewDay, onViewArchives }) {
         <img
           src="/b-b.png"
           alt="Bud & Brush"
-          className="h-12 w-12 rounded-2xl object-cover"
+          className="h-12 w-12 object-cover"
         />
-        <div>
-          <h1 className="text-2xl font-semibold">Bud & Brush</h1>
-          <p className="text-sm text-slate-500">Point of Sale System</p>
-        </div>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
         <span className="rounded-full bg-slate-100 px-3 py-1">
