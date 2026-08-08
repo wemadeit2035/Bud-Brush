@@ -357,6 +357,9 @@ export default function InventoryView({ products, setProducts, showToast }) {
                 Add Bundle
               </button>
             </div>
+            <div className="mb-3 text-xs text-slate-500">
+              These rules are applied automatically in cart totals.
+            </div>
             <div className="space-y-3">
               {formState.bundles.length === 0 ? (
                 <div className="text-xs text-slate-500">

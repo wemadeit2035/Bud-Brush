@@ -1,12 +1,7 @@
 import { useMemo, useState } from "react";
 import { saveProducts, saveTransaction } from "../services/database";
 import { getPaymentTotalTextClass } from "../constants/paymentColors";
-import {
-  applyCartBundles,
-  calculatePrice,
-  getAvailableBundles,
-  getBundlePrice,
-} from "../services/bundleUtils";
+import { applyCartBundles } from "../services/bundleUtils";
 
 export default function CartPanel({
   cart,
@@ -258,14 +253,14 @@ export default function CartPanel({
         ) : (
           bundleSummary.items.map((item) => {
             const product = products.find((p) => p.id === item.productId);
-            const availableBundles = getAvailableBundles(
-              product,
-              cart,
-              products,
-            );
-            const bundlePrice = calculatePrice(product, item.quantity);
-            const displayedPrice = item.lineTotal ?? bundlePrice;
-            const editablePrice = item.customPrice ?? displayedPrice;
+            const fallbackPrice = (product?.price || 0) * item.quantity;
+            const displayedPrice = item.lineTotal ?? fallbackPrice;
+            const hasCustomPrice =
+              typeof item.customPrice === "number" &&
+              Number.isFinite(item.customPrice);
+            const editableLineTotal = hasCustomPrice
+              ? item.customPrice
+              : displayedPrice;
 
             return (
               <div
@@ -306,82 +301,35 @@ export default function CartPanel({
                     </button>
                   </div>
                 </div>
-                {availableBundles.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    <select
-                      className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                      value={item.selectedBundle || "none"}
-                      onChange={(event) => {
-                        const selectedBundle = event.target.value;
-                        const nextValue =
-                          selectedBundle === "none"
-                            ? undefined
-                            : getBundlePrice(product, {
-                                ...item,
-                                selectedBundle,
-                              });
-                        updateCartItem(item.productId, {
-                          selectedBundle:
-                            selectedBundle === "none" ? null : selectedBundle,
-                          customPrice: nextValue,
-                        });
-                      }}
-                    >
-                      <option value="none">Regular price</option>
-                      {availableBundles.map((bundle) => (
-                        <option key={bundle.id} value={bundle.id}>
-                          {bundle.name}
-                        </option>
-                      ))}
-                    </select>
-                    {item.isBundle && (
-                      <p className="text-xs text-emerald-600">
-                        Bundle applied • R{displayedPrice.toFixed(2)}
-                      </p>
-                    )}
-                  </div>
-                )}
                 <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span>Line total</span>
-                    <strong>R{displayedPrice.toFixed(2)}</strong>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-slate-500">Edit price</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-24 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                      value={editablePrice}
-                      onChange={(event) => {
-                        const rawValue = event.target.value;
-                        if (rawValue === "") {
-                          updateCartItem(item.productId, {
-                            customPrice: undefined,
-                          });
-                          return;
-                        }
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500">R</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="w-28 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+                        value={editableLineTotal}
+                        onChange={(event) => {
+                          const rawValue = event.target.value;
+                          if (rawValue === "") {
+                            updateCartItem(item.productId, {
+                              customPrice: undefined,
+                            });
+                            return;
+                          }
 
-                        const parsedValue = Number(rawValue);
-                        updateCartItem(item.productId, {
-                          customPrice: Number.isNaN(parsedValue)
-                            ? undefined
-                            : parsedValue,
-                        });
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="rounded-2xl border border-slate-200 bg-white px-2 py-2 text-xs hover:bg-slate-50"
-                      onClick={() =>
-                        updateCartItem(item.productId, {
-                          customPrice: undefined,
-                        })
-                      }
-                    >
-                      Reset
-                    </button>
+                          const parsedValue = Number(rawValue);
+                          updateCartItem(item.productId, {
+                            customPrice: Number.isNaN(parsedValue)
+                              ? undefined
+                              : parsedValue,
+                          });
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

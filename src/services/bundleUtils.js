@@ -1,35 +1,25 @@
 export function calculatePrice(product, quantity) {
   if (!product || quantity <= 0) return 0;
 
+  const qty = Number(quantity) || 0;
   const unitPrice = Number(product.price) || 0;
-  let best = unitPrice * quantity;
+  let best = unitPrice * qty;
+  const bundles = getAvailableBundles(
+    product,
+    [{ productId: product.id, quantity: qty }],
+    [],
+  );
 
-  const rules = product.bundles || [];
-  rules.forEach((rule) => {
-    if (!rule || rule.qty <= 0) return;
-    const count = Math.floor(quantity / rule.qty);
-    const rem = quantity % rule.qty;
-    const total = count * Number(rule.price) + rem * unitPrice;
+  bundles.forEach((bundle) => {
+    const bundleQty = Number(bundle.qty) || 0;
+    const bundlePrice = Number(bundle.price) || 0;
+    if (bundleQty <= 0) return;
+
+    const count = Math.floor(qty / bundleQty);
+    const rem = qty % bundleQty;
+    const total = count * bundlePrice + rem * unitPrice;
     if (total < best) best = total;
   });
-
-  if (product.category === "Greenhouse" && product.type === "Pre-roll") {
-    if (quantity >= 3) {
-      const bundleCount = Math.floor(quantity / 3);
-      const rem = quantity % 3;
-      const total = bundleCount * 150 + rem * unitPrice;
-      if (total < best) best = total;
-    }
-  }
-
-  if (product.category === "Indoor" && product.type === "Pre-roll") {
-    if (quantity >= 3) {
-      const bundleCount = Math.floor(quantity / 3);
-      const rem = quantity % 3;
-      const total = bundleCount * 300 + rem * unitPrice;
-      if (total < best) best = total;
-    }
-  }
 
   return best;
 }
@@ -139,22 +129,6 @@ export function getAvailableBundles(product, cartItems, products) {
   return bundles;
 }
 
-export function getBundlePrice(product, item) {
-  if (!product || !item) return null;
-
-  if (item.customPrice !== undefined && item.customPrice !== null) {
-    return Number(item.customPrice);
-  }
-
-  if (!item.selectedBundle) return null;
-
-  const bundle = getAvailableBundles(product, [item], []).find(
-    (entry) => entry.id === item.selectedBundle,
-  );
-
-  return bundle ? Number(bundle.price) : null;
-}
-
 export function applyCartBundles(cartItems, products) {
   const itemsWithProducts = cartItems
     .map((item) => {
@@ -162,7 +136,6 @@ export function applyCartBundles(cartItems, products) {
       if (!product) return null;
 
       const originalTotal = (product.price || 0) * item.quantity;
-      const selectedBundlePrice = getBundlePrice(product, item);
       const lineTotalOverride =
         item.customPrice !== undefined && item.customPrice !== null
           ? Number(item.customPrice)
@@ -171,7 +144,6 @@ export function applyCartBundles(cartItems, products) {
         ...item,
         product,
         originalTotal,
-        selectedBundlePrice,
         lineTotalOverride,
       };
     })
@@ -246,28 +218,31 @@ export function applyCartBundles(cartItems, products) {
       const perItemDiscountRatio = normalTotal > 0 ? discount / normalTotal : 0;
 
       groupItems.forEach((item) => {
-        const lineTotal =
+        const groupLineTotal =
           item.originalTotal - item.originalTotal * perItemDiscountRatio;
+        const automaticLineTotal = calculatePrice(item.product, item.quantity);
+        const bundleLineTotal = Math.min(groupLineTotal, automaticLineTotal);
         processed.push({
           ...item,
-          lineTotal: item.lineTotalOverride ?? lineTotal,
-          isBundle: true,
-          bundleDiscount: item.originalTotal * perItemDiscountRatio,
-          bundleType: group.name,
-          customPrice:
-            item.lineTotalOverride ?? item.selectedBundlePrice ?? false,
+          lineTotal: item.lineTotalOverride ?? bundleLineTotal,
+          isBundle: bundleLineTotal < item.originalTotal,
+          bundleDiscount: Math.max(0, item.originalTotal - bundleLineTotal),
+          bundleType:
+            bundleLineTotal === groupLineTotal ? group.name : "Product Bundle",
+          customPrice: item.lineTotalOverride ?? false,
         });
       });
     } else {
       groupItems.forEach((item) => {
+        const automaticLineTotal = calculatePrice(item.product, item.quantity);
         processed.push({
           ...item,
-          lineTotal: item.lineTotalOverride ?? item.originalTotal,
-          isBundle: false,
-          bundleDiscount: 0,
-          bundleType: null,
-          customPrice:
-            item.lineTotalOverride ?? item.selectedBundlePrice ?? false,
+          lineTotal: item.lineTotalOverride ?? automaticLineTotal,
+          isBundle: automaticLineTotal < item.originalTotal,
+          bundleDiscount: Math.max(0, item.originalTotal - automaticLineTotal),
+          bundleType:
+            automaticLineTotal < item.originalTotal ? "Product Bundle" : null,
+          customPrice: item.lineTotalOverride ?? false,
         });
       });
     }
@@ -281,13 +256,15 @@ export function applyCartBundles(cartItems, products) {
   });
 
   remaining.forEach((item) => {
+    const automaticLineTotal = calculatePrice(item.product, item.quantity);
     processed.push({
       ...item,
-      lineTotal: item.lineTotalOverride ?? item.originalTotal,
-      isBundle: false,
-      bundleDiscount: 0,
-      bundleType: null,
-      customPrice: item.lineTotalOverride ?? item.selectedBundlePrice ?? false,
+      lineTotal: item.lineTotalOverride ?? automaticLineTotal,
+      isBundle: automaticLineTotal < item.originalTotal,
+      bundleDiscount: Math.max(0, item.originalTotal - automaticLineTotal),
+      bundleType:
+        automaticLineTotal < item.originalTotal ? "Product Bundle" : null,
+      customPrice: item.lineTotalOverride ?? false,
     });
   });
 
