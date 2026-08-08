@@ -14,6 +14,7 @@ import {
   saveTransactions,
   loadArchives,
   saveArchive,
+  deleteArchive,
   deleteTransaction,
 } from "./services/database";
 
@@ -129,6 +130,45 @@ function App() {
       0,
     );
 
+    const preRollProducts = products.filter(
+      (product) => product.type?.toLowerCase() === "pre-roll",
+    );
+
+    const soldPreRollByProduct = dayTransactions.reduce((acc, tx) => {
+      (tx.items || []).forEach((item) => {
+        const product = products.find((p) => p.id === item.productId);
+        if (product?.type?.toLowerCase() === "pre-roll") {
+          acc[item.productId] =
+            (acc[item.productId] || 0) + (item.quantity || 0);
+        }
+      });
+      return acc;
+    }, {});
+
+    const preRollRows = preRollProducts.map((product) => {
+      const sold = soldPreRollByProduct[product.id] || 0;
+      const startStock = (product.stock || 0) + sold;
+      const remaining = product.stock || 0;
+
+      return {
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        type: product.type,
+        sold,
+        startStock,
+        remaining,
+      };
+    });
+
+    const preRollSummary = {
+      asOf: archiveDate,
+      totalStart: preRollRows.reduce((sum, row) => sum + row.startStock, 0),
+      totalSold: preRollRows.reduce((sum, row) => sum + row.sold, 0),
+      totalRemaining: preRollRows.reduce((sum, row) => sum + row.remaining, 0),
+      rows: preRollRows,
+    };
+
     const archiveData = {
       transactions: dayTransactions,
       summary: {
@@ -141,6 +181,7 @@ function App() {
         itemCount,
         adjustmentTotal,
         adjustments: dailyAdjustments,
+        preRollSummary,
       },
     };
 
@@ -249,6 +290,32 @@ function App() {
     return await loadArchiveData();
   };
 
+  const handleDeleteArchive = async (archiveDate) => {
+    if (!archiveDate) return false;
+
+    try {
+      const deleted = await deleteArchive(archiveDate);
+
+      if (!deleted) {
+        showToast("Delete Failed", "Failed to delete archive.", "error");
+        return false;
+      }
+
+      await loadArchiveData();
+      showToast(
+        "Archive Deleted",
+        `Deleted archive for ${archiveDate}.`,
+        "success",
+      );
+      setSyncStatus(`Deleted archive for ${archiveDate}`);
+      return true;
+    } catch (error) {
+      console.error("Failed to delete archive:", error);
+      showToast("Delete Failed", "Failed to delete archive.", "error");
+      return false;
+    }
+  };
+
   const initializeApp = async () => {
     const loadedProducts = await loadProducts();
     const loadedTransactions = await loadTransactions();
@@ -336,6 +403,7 @@ function App() {
                 archives={archives}
                 currency={currency}
                 refreshArchives={loadArchiveData}
+                onDeleteArchive={handleDeleteArchive}
               />
             )}
           </div>

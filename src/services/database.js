@@ -601,3 +601,34 @@ export async function saveArchive(archive) {
 
   return saveArchives(archives);
 }
+
+export async function deleteArchive(archiveDate) {
+  if (!archiveDate) {
+    console.error("No archive date provided for deleteArchive");
+    return false;
+  }
+
+  const currentLocalArchives = readLocalStorage(ARCHIVES_KEY);
+  const updatedLocalArchives = currentLocalArchives.filter(
+    (archive) => archive.archive_date !== archiveDate,
+  );
+  writeLocalStorage(ARCHIVES_KEY, updatedLocalArchives);
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from("daily_sales_archive")
+        .delete()
+        .eq("archive_date", archiveDate);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error("Failed to delete archive from Supabase:", error);
+      return false;
+    }
+  }
+
+  return true;
+}
