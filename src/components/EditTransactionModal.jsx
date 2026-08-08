@@ -1,6 +1,7 @@
 // EditTransactionModal.jsx
 import { useState, useEffect } from "react";
 import { saveTransaction } from "../services/database";
+import { getPaymentTotalTextClass } from "../constants/paymentColors";
 
 export default function EditTransactionModal({
   transaction,
@@ -258,9 +259,11 @@ export default function EditTransactionModal({
               <span>-R{discount.toFixed(2)}</span>
             </div>
           )}
-          <div className="mt-2 flex justify-between text-lg font-semibold text-slate-900">
+          <div className="mt-2 flex justify-between text-lg font-semibold">
             <span>Total:</span>
-            <span>R{total.toFixed(2)}</span>
+            <span className={getPaymentTotalTextClass(payment)}>
+              R{total.toFixed(2)}
+            </span>
           </div>
         </div>
 

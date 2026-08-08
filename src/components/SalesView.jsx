@@ -2,6 +2,11 @@ import { useMemo, useState } from "react";
 import PreRollSummary from "./PreRollSummary";
 import EditTransactionModal from "./EditTransactionModal";
 import {
+  TOTAL_REVENUE_TEXT_CLASS,
+  getPaymentBadgeClass,
+  getPaymentTotalTextClass,
+} from "../constants/paymentColors";
+import {
   saveProducts,
   deleteTransaction as deleteTransactionFromDb,
 } from "../services/database";
@@ -284,16 +289,6 @@ export default function SalesView({
     }
   };
 
-  const getPaymentBadgeClass = (payment) => {
-    const classes = {
-      Cash: "bg-emerald-100 text-emerald-700",
-      Yoco: "bg-purple-100 text-purple-700",
-      EFT: "bg-amber-100 text-amber-700",
-      Uberzol: "bg-blue-100 text-blue-700",
-    };
-    return classes[payment] || "bg-slate-100 text-slate-700";
-  };
-
   return (
     <div className="space-y-6">
       <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
@@ -418,7 +413,9 @@ export default function SalesView({
                         </span>
                       </td>
                       <td className="px-4 py-4">
-                        <div className="font-bold text-slate-900">
+                        <div
+                          className={`font-bold ${getPaymentTotalTextClass(tx.payment)}`}
+                        >
                           R{total.toFixed(2)}
                         </div>
                         {totalDiscount > 0 && (
@@ -453,12 +450,12 @@ export default function SalesView({
                 <tr>
                   <td
                     colSpan="4"
-                    className="px-4 py-3 text-right font-bold text-slate-700"
+                    className={`px-4 py-3 text-right font-bold ${TOTAL_REVENUE_TEXT_CLASS}`}
                   >
                     TOTAL SALES:
                   </td>
                   <td className="px-4 py-3">
-                    <div className="font-bold text-slate-900">
+                    <div className={`font-bold ${TOTAL_REVENUE_TEXT_CLASS}`}>
                       R{totalSum.toFixed(2)}
                     </div>
                   </td>

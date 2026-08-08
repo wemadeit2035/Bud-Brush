@@ -1,3 +1,8 @@
+import {
+  TOTAL_REVENUE_TEXT_CLASS,
+  getPaymentTotalTextClass,
+} from "../constants/paymentColors";
+
 export default function DashboardView({ products, transactions }) {
   const totalRevenue = transactions.reduce(
     (sum, tx) => sum + (tx.total || 0),
@@ -83,7 +88,9 @@ export default function DashboardView({ products, transactions }) {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
           <div className="text-sm text-slate-500">Total Revenue</div>
-          <div className="mt-4 text-3xl font-semibold">
+          <div
+            className={`mt-4 text-3xl font-semibold ${TOTAL_REVENUE_TEXT_CLASS}`}
+          >
             R{totalRevenue.toFixed(2)}
           </div>
         </div>
@@ -93,7 +100,9 @@ export default function DashboardView({ products, transactions }) {
             className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200"
           >
             <div className="text-sm text-slate-500">{method}</div>
-            <div className="mt-4 text-2xl font-semibold">
+            <div
+              className={`mt-4 text-2xl font-semibold ${getPaymentTotalTextClass(method)}`}
+            >
               R{paymentTotals[method].toFixed(2)}
             </div>
           </div>
@@ -109,7 +118,9 @@ export default function DashboardView({ products, transactions }) {
                 className="flex items-center justify-between text-sm text-slate-700"
               >
                 <span>{key}</span>
-                <strong>R{paymentTotals[key].toFixed(2)}</strong>
+                <strong className={getPaymentTotalTextClass(key)}>
+                  R{paymentTotals[key].toFixed(2)}
+                </strong>
               </div>
             ))}
           </div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { saveProducts, saveTransaction } from "../services/database";
+import { getPaymentTotalTextClass } from "../constants/paymentColors";
 import {
   applyCartBundles,
   calculatePrice,
@@ -446,11 +447,7 @@ export default function CartPanel({
           <span>Subtotal</span>
           <strong
             id="cartSubtotal"
-            className={
-              paymentMethod === "Uberzol" && isUberzolEdited
-                ? "text-blue-600"
-                : ""
-            }
+            className={getPaymentTotalTextClass(paymentMethod)}
           >
             R{displayedTotal.toFixed(2)}
           </strong>

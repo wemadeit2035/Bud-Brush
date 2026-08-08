@@ -1,4 +1,8 @@
 import { useState } from "react";
+import {
+  TOTAL_REVENUE_TEXT_CLASS,
+  getPaymentTotalTextClass,
+} from "../constants/paymentColors";
 
 export default function ArchiveView({ archives, currency, refreshArchives }) {
   const [selectedArchive, setSelectedArchive] = useState(null);
@@ -59,7 +63,9 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
                         {archive.transaction_count || 0}
                       </td>
                       <td className="px-4 py-4">{archive.item_count || 0}</td>
-                      <td className="px-4 py-4">
+                      <td
+                        className={`px-4 py-4 font-semibold ${TOTAL_REVENUE_TEXT_CLASS}`}
+                      >
                         {currency(
                           summary.totalRevenue || archive.total_revenue || 0,
                         )}
@@ -102,10 +108,12 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
             </button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-3xl bg-slate-50 p-4">
               <div className="text-sm text-slate-500">Revenue</div>
-              <div className="mt-2 text-xl font-semibold">
+              <div
+                className={`mt-2 text-xl font-semibold ${TOTAL_REVENUE_TEXT_CLASS}`}
+              >
                 {currency(
                   selectedArchive.data?.summary?.totalRevenue ||
                     selectedArchive.total_revenue ||
@@ -115,7 +123,7 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
             </div>
             <div className="rounded-3xl bg-slate-50 p-4">
               <div className="text-sm text-slate-500">Cash Total</div>
-              <div className="mt-2 text-xl font-semibold">
+              <div className="mt-2 text-xl font-semibold text-emerald-700">
                 {currency(
                   selectedArchive.data?.summary?.cashTotal ||
                     selectedArchive.cash_total ||
@@ -125,7 +133,7 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
             </div>
             <div className="rounded-3xl bg-slate-50 p-4">
               <div className="text-sm text-slate-500">EFT Total</div>
-              <div className="mt-2 text-xl font-semibold">
+              <div className="mt-2 text-xl font-semibold text-amber-700">
                 {currency(
                   selectedArchive.data?.summary?.eftTotal ||
                     selectedArchive.eft_total ||
@@ -135,10 +143,20 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
             </div>
             <div className="rounded-3xl bg-slate-50 p-4">
               <div className="text-sm text-slate-500">Yoco Total</div>
-              <div className="mt-2 text-xl font-semibold">
+              <div className="mt-2 text-xl font-semibold text-sky-600">
                 {currency(
                   selectedArchive.data?.summary?.yocoTotal ||
                     selectedArchive.yoco_total ||
+                    0,
+                )}
+              </div>
+            </div>
+            <div className="rounded-3xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Uberzol Total</div>
+              <div className="mt-2 text-xl font-semibold text-violet-700">
+                {currency(
+                  selectedArchive.data?.summary?.uberzolTotal ||
+                    selectedArchive.uberzol_total ||
                     0,
                 )}
               </div>
@@ -199,7 +217,11 @@ export default function ArchiveView({ archives, currency, refreshArchives }) {
                 {(selectedArchive.data?.transactions || []).map((tx, index) => (
                   <tr key={index} className="border-t border-slate-200">
                     <td className="px-4 py-4">{tx.payment}</td>
-                    <td className="px-4 py-4">{currency(tx.total)}</td>
+                    <td
+                      className={`px-4 py-4 font-semibold ${getPaymentTotalTextClass(tx.payment)}`}
+                    >
+                      {currency(tx.total)}
+                    </td>
                     <td className="px-4 py-4">
                       {tx.items?.length > 0
                         ? tx.items
