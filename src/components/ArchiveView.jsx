@@ -108,7 +108,10 @@ export default function ArchiveView({
       <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Sales Archive</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <img src="/archives.svg" alt="Archive icon" className="h-5 w-5" />
+              Sales Archive
+            </h2>
             <p className="text-sm text-slate-500">
               View daily archived sales history.
             </p>

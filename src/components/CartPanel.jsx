@@ -229,7 +229,6 @@ export default function CartPanel({
         "success",
       );
     } catch (error) {
-      console.error("Checkout error:", error);
       showToast("Error", "Failed to save transaction.", "error");
     }
   };
@@ -239,8 +238,8 @@ export default function CartPanel({
   return (
     <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">
-          <i className="fa fa-shopping-cart me-2" />
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <img src="/cart.svg" alt="Cart icon" className="h-5 w-5" />
           Cart
         </h2>
         <span className="text-sm text-slate-500">{cart.length} items</span>

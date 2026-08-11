@@ -37,7 +37,6 @@ function App() {
         ? parsed.adjustments
         : [];
     } catch (error) {
-      console.error("Failed to load daily adjustments:", error);
       return [];
     }
   });
@@ -45,7 +44,6 @@ function App() {
     try {
       return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
     } catch (error) {
-      console.error("Failed to load auth state:", error);
       return false;
     }
   });
@@ -70,17 +68,13 @@ function App() {
           adjustments: dailyAdjustments,
         }),
       );
-    } catch (error) {
-      console.error("Failed to save daily adjustments:", error);
-    }
+    } catch (error) {}
   }, [dailyAdjustments]);
 
   useEffect(() => {
     try {
       localStorage.setItem(AUTH_STORAGE_KEY, String(isAuthenticated));
-    } catch (error) {
-      console.error("Failed to save auth state:", error);
-    }
+    } catch (error) {}
   }, [isAuthenticated]);
 
   const loadArchiveData = async () => {
@@ -263,9 +257,7 @@ function App() {
         try {
           await deleteTransaction(txId);
           deletedCount++;
-        } catch (err) {
-          console.error(`Failed to delete transaction ${txId}:`, err);
-        }
+        } catch (err) {}
       }
 
       setTransactions(updatedTransactions);
@@ -281,7 +273,6 @@ function App() {
         `Archived ${result.count} transactions for ${today.toLocaleDateString()}`,
       );
     } catch (error) {
-      console.error("Error clearing day with archive:", error);
       showToast("Error", "Failed to archive and clear today's sales.", "error");
     }
   };
@@ -310,7 +301,6 @@ function App() {
       setSyncStatus(`Deleted archive for ${archiveDate}`);
       return true;
     } catch (error) {
-      console.error("Failed to delete archive:", error);
       showToast("Delete Failed", "Failed to delete archive.", "error");
       return false;
     }
@@ -328,7 +318,6 @@ function App() {
     const today = new Date().toISOString().slice(0, 10);
     const lastRun = localStorage.getItem("bb_last_run_date");
     if (lastRun && lastRun !== today) {
-      console.log(`📅 New day detected! Archiving ${lastRun} sales...`);
       const result = await archiveSalesForDate(lastRun);
       if (result.archived) {
         showToast(
@@ -358,13 +347,8 @@ function App() {
           <TopBar
             syncStatus={syncStatus}
             onNewDay={clearTodaySalesWithArchive}
-            onViewArchives={() => setActiveView("archive")}
           />
-          <TabNav
-            activeView={activeView}
-            onChangeView={setActiveView}
-            onClearDay={clearTodaySalesWithArchive}
-          />
+          <TabNav activeView={activeView} onChangeView={setActiveView} />
           <div>
             {activeView === "pos" && (
               <POSView
@@ -396,7 +380,11 @@ function App() {
               />
             )}
             {activeView === "dashboard" && (
-              <DashboardView products={products} transactions={transactions} />
+              <DashboardView
+                products={products}
+                transactions={transactions}
+                archives={archives}
+              />
             )}
             {activeView === "archive" && (
               <ArchiveView

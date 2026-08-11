@@ -1,4 +1,4 @@
-export default function TopBar({ syncStatus, onNewDay, onViewArchives }) {
+export default function TopBar({ syncStatus, onNewDay }) {
   return (
     <header className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
@@ -13,20 +13,11 @@ export default function TopBar({ syncStatus, onNewDay, onViewArchives }) {
           {syncStatus}
         </span>
         <button
-          className="rounded-2xl bg-amber-500 px-4 py-2 text-white hover:bg-amber-600"
+          className="inline-flex items-center justify-center"
           type="button"
           onClick={onNewDay}
         >
-          <i className="fas fa-calendar-plus me-2" />
-          New Day
-        </button>
-        <button
-          className="rounded-2xl bg-sky-600 px-4 py-2 text-white hover:bg-sky-700"
-          type="button"
-          onClick={onViewArchives}
-        >
-          <i className="fas fa-archive me-2" />
-          Archives
+          <img src="/newday.svg" alt="New Day icon" className="h-10 w-10" />
         </button>
       </div>
     </header>

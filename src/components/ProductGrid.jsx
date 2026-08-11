@@ -31,6 +31,20 @@ export default function ProductGrid({ products, cart, setCart }) {
     }
   };
 
+  const handleCardClick = (event, product) => {
+    if (product.stock <= 0) return;
+    if (event.target.closest("button")) return;
+    addToCart(product.id, 1);
+  };
+
+  const handleCardKeyDown = (event, product) => {
+    if (product.stock <= 0) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      addToCart(product.id, 1);
+    }
+  };
+
   const getCategoryBadgeClass = (category) => {
     const normalized = String(category || "").toLowerCase();
 
@@ -58,7 +72,7 @@ export default function ProductGrid({ products, cart, setCart }) {
   };
 
   return (
-    <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
+    <div className="rounded-3xl bg-white p-4 shadow-sm border border-slate-200 sm:p-5">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <input
           type="text"
@@ -91,7 +105,7 @@ export default function ProductGrid({ products, cart, setCart }) {
           ))}
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         {filteredProducts.length === 0 ? (
           <div className="col-span-full rounded-3xl border border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
             No products match your search.
@@ -100,46 +114,59 @@ export default function ProductGrid({ products, cart, setCart }) {
           filteredProducts.map((product) => (
             <div
               key={product.id}
-              className="rounded-3xl border border-slate-200 p-5"
+              role="button"
+              tabIndex={product.stock > 0 ? 0 : -1}
+              aria-disabled={product.stock <= 0}
+              className={`rounded-3xl border p-3 sm:p-4 transition ${
+                product.stock > 0
+                  ? "cursor-pointer border-slate-200 hover:border-sky-300"
+                  : "cursor-not-allowed border-slate-200"
+              }`}
+              onClick={(event) => handleCardClick(event, product)}
+              onKeyDown={(event) => handleCardKeyDown(event, product)}
             >
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-2 flex items-start justify-between gap-2">
                 <div>
-                  <h3 className="font-semibold">{product.name}</h3>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                  <h3 className="text-sm font-semibold leading-tight sm:text-base">
+                    {product.name}
+                  </h3>
+                  <div className="mt-1 flex flex-nowrap items-center gap-0.5 overflow-hidden text-[10px] text-slate-500 sm:text-[11px]">
                     <span
-                      className={`rounded-full px-2 py-1 ${getCategoryBadgeClass(product.category)}`}
+                      className={`truncate rounded-full px-1.5 py-0.5 leading-none ${getCategoryBadgeClass(product.category)}`}
                     >
                       {product.category}
                     </span>
                     <span
-                      className={`rounded-full px-2 py-1 ${getTypeBadgeClass(product.type)}`}
+                      className={`truncate rounded-full px-1.5 py-0.5 leading-none ${getTypeBadgeClass(product.type)}`}
                     >
                       {product.type}
                     </span>
                   </div>
                 </div>
-                <span className="text-lg font-semibold">R{product.price}</span>
+                <span className="text-sm font-semibold sm:text-base">
+                  R{product.price}
+                </span>
               </div>
-              <div className="mb-4 text-sm text-slate-500">
+              <div className="mb-3 text-xs text-slate-500 sm:text-sm">
                 {product.stock} in stock
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-nowrap items-center gap-1 overflow-hidden">
                 <button
-                  className="rounded-full bg-slate-100 px-4 py-2 text-sm"
+                  className="min-w-0 flex-1 rounded-full bg-slate-100 px-2 py-1.5 text-xs sm:px-3 sm:text-sm"
                   onClick={() => addToCart(product.id, 1)}
                   disabled={product.stock <= 0}
                 >
                   +1
                 </button>
                 <button
-                  className="rounded-full bg-slate-100 px-4 py-2 text-sm"
+                  className="min-w-0 flex-1 rounded-full bg-slate-100 px-2 py-1.5 text-xs sm:px-3 sm:text-sm"
                   onClick={() => addToCart(product.id, 3)}
                   disabled={product.stock <= 0}
                 >
                   +3
                 </button>
                 <button
-                  className="rounded-full bg-slate-100 px-4 py-2 text-sm"
+                  className="min-w-0 flex-1 rounded-full bg-slate-100 px-2 py-1.5 text-xs sm:px-3 sm:text-sm"
                   onClick={() => addToCart(product.id, 5)}
                   disabled={product.stock <= 0}
                 >

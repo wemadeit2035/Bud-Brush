@@ -3,7 +3,11 @@ import {
   getPaymentTotalTextClass,
 } from "../constants/paymentColors";
 
-export default function DashboardView({ products, transactions }) {
+export default function DashboardView({
+  products,
+  transactions,
+  archives = [],
+}) {
   const totalRevenue = transactions.reduce(
     (sum, tx) => sum + (tx.total || 0),
     0,
@@ -35,45 +39,70 @@ export default function DashboardView({ products, transactions }) {
     .sort((a, b) => b.units - a.units)
     .slice(0, 5);
 
-  const lowStock = products.filter((product) => product.stock < 15);
+  const lowStock = products.filter((product) => {
+    const normalizedType = String(product.type || "")
+      .toLowerCase()
+      .replace(/\s+/g, "-");
+    const isTrackedType =
+      normalizedType === "pre-roll" || normalizedType === "flower";
+    return isTrackedType && product.stock < 15;
+  });
 
   const dailyRevenue = (() => {
-    const days = [];
-    const totalsByDay = {};
-    const now = new Date();
+    const totalsByDay = new Map();
 
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(now);
-      date.setHours(0, 0, 0, 0);
-      date.setDate(now.getDate() - i);
-      const key = date.toISOString().slice(0, 10);
-      days.push({
-        key,
-        label: date.toLocaleDateString(undefined, { weekday: "short" }),
-        dateLabel: date.toLocaleDateString(undefined, {
-          day: "2-digit",
-          month: "short",
-        }),
-      });
-      totalsByDay[key] = 0;
-    }
+    // Primary source: archived day totals keyed by archive date.
+    archives.forEach((archive) => {
+      const key = String(archive?.archive_date || "").slice(0, 10);
+      if (!key) return;
 
+      const archiveTotal = Number(
+        archive?.total_revenue || archive?.data?.summary?.totalRevenue || 0,
+      );
+      totalsByDay.set(key, archiveTotal);
+    });
+
+    // Fallback source: current transactions only for dates not yet archived.
+    const txTotalsByDay = new Map();
     transactions.forEach((tx) => {
       if (!tx?.date) return;
       const txDate = new Date(tx.date);
       if (Number.isNaN(txDate.getTime())) return;
       txDate.setHours(0, 0, 0, 0);
       const key = txDate.toISOString().slice(0, 10);
-      if (Object.prototype.hasOwnProperty.call(totalsByDay, key)) {
-        totalsByDay[key] += Number(tx.total || 0);
+      txTotalsByDay.set(
+        key,
+        (txTotalsByDay.get(key) || 0) + Number(tx.total || 0),
+      );
+    });
+
+    txTotalsByDay.forEach((value, key) => {
+      if (!totalsByDay.has(key)) {
+        totalsByDay.set(key, value);
       }
     });
 
-    const values = days.map((day) => totalsByDay[day.key] || 0);
+    const days = Array.from(totalsByDay.entries())
+      .sort(([a], [b]) => (a < b ? 1 : -1))
+      .slice(0, 7)
+      .map(([key, value]) => {
+        const date = new Date(`${key}T00:00:00`);
+        return {
+          key,
+          label: date.toLocaleDateString(undefined, { weekday: "short" }),
+          dateLabel: date.toLocaleDateString(undefined, {
+            day: "2-digit",
+            month: "short",
+          }),
+          value,
+        };
+      });
+
+    const values = days.map((day) => day.value || 0);
     const maxValue = Math.max(...values, 0);
 
     return days.map((day) => {
-      const value = totalsByDay[day.key] || 0;
+      const value = day.value || 0;
       const percent = maxValue > 0 ? (value / maxValue) * 100 : 0;
       return {
         ...day,
@@ -85,6 +114,12 @@ export default function DashboardView({ products, transactions }) {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-3xl bg-white p-4 shadow-sm border border-slate-200">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <img src="/dashboard.svg" alt="Dashboard icon" className="h-5 w-5" />
+          Dashboard
+        </h2>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
           <div className="text-sm text-slate-500">Total Revenue</div>

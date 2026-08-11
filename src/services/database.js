@@ -13,7 +13,6 @@ function getSupabaseClient() {
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn("Supabase credentials missing, using localStorage fallback");
     return null;
   }
 
@@ -21,7 +20,6 @@ function getSupabaseClient() {
     supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
     return supabaseClient;
   } catch (error) {
-    console.error("Failed to initialize Supabase client:", error);
     return null;
   }
 }
@@ -32,7 +30,6 @@ function readLocalStorage(key) {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : [];
   } catch (error) {
-    console.error(`Failed to read ${key} from local storage:`, error);
     return [];
   }
 }
@@ -42,7 +39,6 @@ function writeLocalStorage(key, value) {
     localStorage.setItem(key, JSON.stringify(value));
     return true;
   } catch (error) {
-    console.error(`Failed to write ${key} to local storage:`, error);
     return false;
   }
 }
@@ -156,9 +152,7 @@ export async function loadProducts() {
       if (data && data.length > 0) {
         return data.map(normalizeProduct);
       }
-    } catch (error) {
-      console.error("Failed to load products from Supabase:", error);
-    }
+    } catch (error) {}
   }
 
   return readLocalStorage(PRODUCTS_KEY);
@@ -180,7 +174,6 @@ export async function saveProducts(products) {
         .select("id");
 
       if (existingError) {
-        console.error("Supabase product read error:", existingError);
         throw existingError;
       }
 
@@ -197,7 +190,6 @@ export async function saveProducts(products) {
           .upsert(normalizedProducts, { onConflict: "id" });
 
         if (error) {
-          console.error("Supabase upsert error:", error);
           throw error;
         }
       }
@@ -209,24 +201,15 @@ export async function saveProducts(products) {
           .in("id", staleIds);
 
         if (deleteError) {
-          console.error("Supabase delete error:", deleteError);
           throw deleteError;
         }
       }
-
-      console.log(
-        `✅ Synced ${normalizedProducts.length} products to Supabase (${staleIds.length} deleted)`,
-      );
       return true;
     } catch (error) {
-      console.error("Failed to save products to Supabase:", error);
       return true;
     }
   }
 
-  console.log(
-    `💾 Saved ${normalizedProducts.length} products to localStorage only`,
-  );
   return true;
 }
 
@@ -235,7 +218,6 @@ export async function saveProducts(products) {
 // ============================================
 
 export async function loadTransactions() {
-  console.log("🔍 Loading transactions...");
   const supabase = getSupabaseClient();
 
   if (supabase) {
@@ -246,13 +228,8 @@ export async function loadTransactions() {
         .order("transaction_date", { ascending: false });
 
       if (transactionError) {
-        console.error("❌ Transaction load error:", transactionError);
         throw transactionError;
       }
-
-      console.log(
-        `✅ Loaded ${transactionRows?.length || 0} transactions from Supabase`,
-      );
 
       if (!transactionRows || transactionRows.length === 0) {
         return [];
@@ -265,7 +242,6 @@ export async function loadTransactions() {
         .in("transaction_id", transactionIds);
 
       if (itemsError) {
-        console.error("❌ Transaction items load error:", itemsError);
         throw itemsError;
       }
 
@@ -283,25 +259,15 @@ export async function loadTransactions() {
           transaction_items: itemsByTransaction[transaction.id] || [],
         }),
       );
-
-      console.log(
-        `✅ Processed ${transactions.length} transactions with items`,
-      );
       return transactions;
-    } catch (error) {
-      console.error("❌ Failed to load transactions from Supabase:", error);
-    }
+    } catch (error) {}
   }
 
-  console.log("📦 Loading transactions from localStorage fallback");
   const localData = readLocalStorage(TRANSACTIONS_KEY);
-  console.log(`📦 Loaded ${localData.length} transactions from localStorage`);
   return localData;
 }
 
 export async function saveTransactions(transactions) {
-  console.log(`💾 Saving ${transactions?.length || 0} transactions...`);
-
   const supabase = getSupabaseClient();
   const normalizedTransactions = (transactions || []).map(normalizeTransaction);
 
@@ -312,18 +278,12 @@ export async function saveTransactions(transactions) {
     try {
       // If there are no transactions, delete everything
       if (normalizedTransactions.length === 0) {
-        console.log("🗑️ No transactions, clearing all...");
-
         // Get all transaction IDs first
         const { data: allTransactions, error: fetchError } = await supabase
           .from("transactions")
           .select("id");
 
         if (fetchError) {
-          console.error(
-            "❌ Error fetching transactions to delete:",
-            fetchError,
-          );
           throw fetchError;
         }
 
@@ -337,7 +297,6 @@ export async function saveTransactions(transactions) {
             .in("transaction_id", ids);
 
           if (itemsError) {
-            console.error("❌ Error clearing items:", itemsError);
             throw itemsError;
           }
 
@@ -348,19 +307,14 @@ export async function saveTransactions(transactions) {
             .in("id", ids);
 
           if (txError) {
-            console.error("❌ Error clearing transactions:", txError);
             throw txError;
           }
         }
-
-        console.log("✅ All transactions cleared from Supabase");
         return true;
       }
 
       // Process each transaction individually
       for (const tx of normalizedTransactions) {
-        console.log(`💾 Saving transaction ${tx.id}...`);
-
         const transactionData = {
           id: tx.id,
           transaction_date: tx.date,
@@ -377,7 +331,6 @@ export async function saveTransactions(transactions) {
           .upsert(transactionData, { onConflict: "id" });
 
         if (txError) {
-          console.error(`❌ Error saving transaction ${tx.id}:`, txError);
           throw txError;
         }
 
@@ -405,7 +358,6 @@ export async function saveTransactions(transactions) {
           .eq("transaction_id", tx.id);
 
         if (deleteError) {
-          console.error(`❌ Error deleting items for ${tx.id}:`, deleteError);
           throw deleteError;
         }
 
@@ -416,121 +368,85 @@ export async function saveTransactions(transactions) {
             .insert(itemData);
 
           if (insertError) {
-            console.error(
-              `❌ Error inserting items for ${tx.id}:`,
-              insertError,
-            );
             throw insertError;
           }
         }
-
-        console.log(`✅ Transaction ${tx.id} saved successfully`);
       }
 
-      console.log("✅ All transactions saved to Supabase");
       return true;
     } catch (error) {
-      console.error("❌ Failed to save transactions to Supabase:", error);
       return true;
     }
   }
 
-  console.log(
-    `💾 Saved ${normalizedTransactions.length} transactions to localStorage only`,
-  );
   return true;
 }
 
 export async function saveTransaction(transaction) {
-  console.log("💾 Saving single transaction...");
   const transactions = await loadTransactions();
   const normalizedTx = normalizeTransaction(transaction);
 
   // Generate ID if not provided
   if (!normalizedTx.id) {
     normalizedTx.id = generateId();
-    console.log(`📝 Generated new ID: ${normalizedTx.id}`);
   }
-
-  console.log(`📝 Transaction ID: ${normalizedTx.id}`);
-  console.log(`📝 Items: ${normalizedTx.items.length}`);
 
   // Check if transaction already exists
   const existingIndex = transactions.findIndex(
     (tx) => tx.id === normalizedTx.id,
   );
   if (existingIndex >= 0) {
-    console.log(`🔄 Updating existing transaction ${normalizedTx.id}`);
     transactions[existingIndex] = normalizedTx;
   } else {
-    console.log(`➕ Adding new transaction ${normalizedTx.id}`);
     transactions.push(normalizedTx);
   }
 
   const result = await saveTransactions(transactions);
-  console.log(`✅ Transaction save ${result ? "successful" : "failed"}`);
   return result;
 }
 
 export async function deleteTransaction(transactionId) {
-  console.log(`🗑️ DELETING transaction ${transactionId}...`);
-
   if (!transactionId) {
-    console.error("❌ No transaction ID provided");
     return false;
   }
 
   const supabase = getSupabaseClient();
 
   // ALWAYS delete from localStorage first
-  console.log("📦 Removing from localStorage...");
   const transactions = await loadTransactions();
   const updatedTransactions = transactions.filter(
     (tx) => tx.id !== transactionId,
   );
   writeLocalStorage(TRANSACTIONS_KEY, updatedTransactions);
-  console.log(`📦 localStorage updated`);
 
   // Then delete from Supabase
   if (supabase) {
     try {
-      console.log(`🗑️ Deleting from Supabase...`);
-
       // Step 1: Delete transaction items (child records)
-      console.log(`🗑️ Deleting items for transaction ${transactionId}...`);
       const { error: itemsError } = await supabase
         .from("transaction_items")
         .delete()
         .eq("transaction_id", transactionId);
 
       if (itemsError) {
-        console.error("❌ Error deleting items:", itemsError);
         // Continue anyway to try deleting the transaction
-      } else {
-        console.log(`✅ Deleted items from transaction_items`);
       }
 
       // Step 2: Delete the transaction (parent record)
-      console.log(`🗑️ Deleting transaction ${transactionId}...`);
       const { error: txError } = await supabase
         .from("transactions")
         .delete()
         .eq("id", transactionId);
 
       if (txError) {
-        console.error("❌ Error deleting transaction:", txError);
         throw txError;
       }
-
-      console.log(`✅ Transaction ${transactionId} deleted from Supabase`);
       return true;
     } catch (error) {
-      console.error("❌ Failed to delete from Supabase:", error);
       return true;
     }
   }
 
-  console.log(`✅ Transaction ${transactionId} deleted from localStorage only`);
   return true;
 }
 
@@ -550,9 +466,7 @@ export async function loadArchives() {
 
       if (error) throw error;
       return (data || []).map(normalizeArchive);
-    } catch (error) {
-      console.error("Failed to load archives from Supabase:", error);
-    }
+    } catch (error) {}
   }
 
   return readLocalStorage(ARCHIVES_KEY);
@@ -572,17 +486,12 @@ export async function saveArchives(archives) {
         .upsert(normalizedArchives, { onConflict: "archive_date" });
 
       if (error) throw error;
-      console.log(`✅ Saved ${normalizedArchives.length} archives to Supabase`);
       return true;
     } catch (error) {
-      console.error("Failed to save archives to Supabase:", error);
       return true;
     }
   }
 
-  console.log(
-    `💾 Saved ${normalizedArchives.length} archives to localStorage only`,
-  );
   return true;
 }
 
@@ -604,7 +513,6 @@ export async function saveArchive(archive) {
 
 export async function deleteArchive(archiveDate) {
   if (!archiveDate) {
-    console.error("No archive date provided for deleteArchive");
     return false;
   }
 
@@ -625,7 +533,6 @@ export async function deleteArchive(archiveDate) {
       if (error) throw error;
       return true;
     } catch (error) {
-      console.error("Failed to delete archive from Supabase:", error);
       return false;
     }
   }

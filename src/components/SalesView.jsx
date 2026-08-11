@@ -58,21 +58,48 @@ export default function SalesView({
     return totalSum + adjustmentTotal;
   }, [totalSum, adjustmentTotal]);
 
+  const formatCsvCell = (value) => {
+    const text = String(value ?? "");
+    return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
+
+  const formatExportDateTime = (timestamp) => {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return { date: "", time: "" };
+    }
+
+    return {
+      date: date.toISOString().slice(0, 10),
+      time: date.toISOString().slice(11, 19),
+    };
+  };
+
   const exportSalesCsv = () => {
     const rows = [
-      ["Date", "Product", "Qty", "Payment", "Total"],
-      ...filtered.flatMap((tx) =>
-        tx.items.map((item) => [
-          new Date(tx.date).toLocaleString(),
-          item.productName,
-          item.quantity,
+      ["Date", "Time", "Items", "Total Qty", "Payment", "Total"],
+      ...filtered.map((tx) => {
+        const { date, time } = formatExportDateTime(tx.date);
+        const items = tx.items
+          .map((item) => `${item.productName} x${item.quantity}`)
+          .join("; ");
+        const totalQty = tx.items.reduce(
+          (sum, item) => sum + (Number(item.quantity) || 0),
+          0,
+        );
+
+        return [
+          date,
+          time,
+          items,
+          totalQty,
           tx.payment,
-          item.lineTotal,
-        ]),
-      ),
+          Number(tx.total || 0).toFixed(2),
+        ];
+      }),
     ];
 
-    const csv = rows.map((row) => row.join(",")).join("\n");
+    const csv = rows.map((row) => row.map(formatCsvCell).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -280,12 +307,7 @@ export default function SalesView({
 
       showToast("Deleted", "Transaction removed successfully.", "success");
     } catch (error) {
-      console.error("❌ Delete error:", error);
-      showToast(
-        "Error",
-        "Failed to delete transaction. Check console for details.",
-        "error",
-      );
+      showToast("Error", "Failed to delete transaction.", "error");
     }
   };
 
@@ -294,7 +316,10 @@ export default function SalesView({
       <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Transaction History</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <img src="/sales.svg" alt="Sales icon" className="h-5 w-5" />
+              Transaction History
+            </h2>
             <p className="text-sm text-slate-500">
               Review sales and export transactions.
             </p>

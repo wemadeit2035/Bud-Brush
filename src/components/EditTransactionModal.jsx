@@ -103,7 +103,6 @@ export default function EditTransactionModal({
       onSave(updatedTransaction);
       showToast("Success", "Transaction updated successfully.", "success");
     } catch (error) {
-      console.error("Error saving edited transaction:", error);
       showToast("Error", "Failed to update transaction.", "error");
     }
   };

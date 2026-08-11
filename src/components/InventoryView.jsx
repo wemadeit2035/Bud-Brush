@@ -178,7 +178,14 @@ export default function InventoryView({ products, setProducts, showToast }) {
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
       <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Stock Management</h2>
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <img
+              src="/inventory.svg"
+              alt="Inventory icon"
+              className="h-5 w-5"
+            />
+            Stock Management
+          </h2>
           <button
             type="button"
             className="rounded-3xl bg-emerald-600 px-4 py-2 text-sm text-white"
@@ -196,8 +203,8 @@ export default function InventoryView({ products, setProducts, showToast }) {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
-        <div className="overflow-x-auto rounded-3xl border border-slate-200">
-          <table className="min-w-full text-left text-sm text-slate-700">
+        <div className="w-full max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-3xl border border-slate-200">
+          <table className="min-w-[640px] text-left text-sm text-slate-700">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-4 py-3">Product</th>

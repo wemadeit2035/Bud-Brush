@@ -34,11 +34,16 @@ export default function PreRollSummary({ products, transactions }) {
     };
   });
 
+  const soldRows = rows.filter((row) => row.sold > 0);
+
   return (
     <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Pre-roll Summary</h2>
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <img src="/preroll.svg" alt="Pre-roll icon" className="h-5 w-5" />
+            Pre-roll Summary
+          </h2>
           <p className="text-sm text-slate-500">
             Daily pre-roll stock and sales.
           </p>
@@ -55,13 +60,13 @@ export default function PreRollSummary({ products, transactions }) {
         <div className="rounded-3xl bg-slate-50 p-4 text-center">
           <div className="text-sm text-slate-500">Start</div>
           <div className="mt-2 font-semibold">
-            {rows.reduce((sum, row) => sum + row.startStock, 0)}
+            {soldRows.reduce((sum, row) => sum + row.startStock, 0)}
           </div>
         </div>
         <div className="rounded-3xl bg-slate-50 p-4 text-center">
           <div className="text-sm text-slate-500">Remaining</div>
           <div className="mt-2 font-semibold">
-            {rows.reduce((sum, row) => sum + row.remaining, 0)}
+            {soldRows.reduce((sum, row) => sum + row.remaining, 0)}
           </div>
         </div>
       </div>
@@ -76,19 +81,27 @@ export default function PreRollSummary({ products, transactions }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-t border-slate-200">
-                <td className="px-4 py-4">
-                  <div className="font-semibold">{row.name}</div>
-                  <div className="text-xs text-slate-500">
-                    {row.category} • {row.type}
-                  </div>
+            {soldRows.length > 0 ? (
+              soldRows.map((row) => (
+                <tr key={row.id} className="border-t border-slate-200">
+                  <td className="px-4 py-4">
+                    <div className="font-semibold">{row.name}</div>
+                    <div className="text-xs text-slate-500">
+                      {row.category} • {row.type}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">{row.startStock}</td>
+                  <td className="px-4 py-4">{row.sold}</td>
+                  <td className="px-4 py-4">{row.remaining}</td>
+                </tr>
+              ))
+            ) : (
+              <tr className="border-t border-slate-200">
+                <td className="px-4 py-4 text-slate-500" colSpan={4}>
+                  No pre-roll sales recorded today.
                 </td>
-                <td className="px-4 py-4">{row.startStock}</td>
-                <td className="px-4 py-4">{row.sold}</td>
-                <td className="px-4 py-4">{row.remaining}</td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
