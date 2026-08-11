@@ -125,9 +125,9 @@ export default function ProductGrid({ products, cart, setCart }) {
               onClick={(event) => handleCardClick(event, product)}
               onKeyDown={(event) => handleCardKeyDown(event, product)}
             >
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-semibold leading-tight sm:text-base">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-xs font-semibold leading-tight sm:text-sm">
                     {product.name}
                   </h3>
                   <div className="mt-1 flex flex-nowrap items-center gap-0.5 overflow-hidden text-[10px] text-slate-500 sm:text-[11px]">
@@ -143,7 +143,7 @@ export default function ProductGrid({ products, cart, setCart }) {
                     </span>
                   </div>
                 </div>
-                <span className="text-sm font-semibold sm:text-base">
+                <span className="shrink-0 whitespace-nowrap text-xs font-semibold sm:text-sm">
                   R{product.price}
                 </span>
               </div>
