@@ -80,6 +80,7 @@ function normalizeTransaction(transaction) {
 
   return {
     id: String(transaction.id || transaction.transaction_id || ""),
+    memberId: transaction.member_id || transaction.memberId || null,
     payment: transaction.payment || "Cash",
     total: Number(transaction.total || transaction.subtotal || 0),
     items: items,
@@ -94,6 +95,53 @@ function normalizeTransaction(transaction) {
     subtotal: Number(transaction.subtotal || transaction.total || 0),
     discount: Number(transaction.discount || 0),
   };
+}
+
+function normalizeMember(member) {
+  return {
+    id: String(member.id || ""),
+    membershipNumber: String(
+      member.membership_number || member.membershipNumber || "",
+    ),
+    firstName: member.first_name || member.firstName || "",
+    lastName: member.last_name || member.lastName || "",
+    phone: member.phone || "",
+    email: member.email || "",
+    dateOfBirth: member.date_of_birth || member.dateOfBirth || "",
+    status: member.status || "active",
+    consentVersion: member.consent_version || member.consentVersion || "",
+    consentSignedAt:
+      member.consent_signed_at ||
+      member.consentSignedAt ||
+      member.signed_at ||
+      "",
+    createdBy: member.created_by || member.createdBy || "",
+    updatedBy: member.updated_by || member.updatedBy || "",
+    createdAt: member.created_at || member.createdAt || "",
+    updatedAt: member.updated_at || member.updatedAt || "",
+  };
+}
+
+function buildMemberPayload(member, includeAuditFields = true) {
+  const payload = {
+    id: member.id || undefined,
+    membership_number: String(member.membershipNumber || "").trim(),
+    first_name: String(member.firstName || "").trim(),
+    last_name: String(member.lastName || "").trim(),
+    phone: String(member.phone || "").trim(),
+    email: String(member.email || "").trim() || null,
+    date_of_birth: member.dateOfBirth || null,
+    status: String(member.status || "active").trim() || "active",
+    consent_version: String(member.consentVersion || "").trim() || null,
+    consent_signed_at: member.consentSignedAt || null,
+  };
+
+  if (includeAuditFields) {
+    payload.created_by = String(member.createdBy || "").trim() || null;
+    payload.updated_by = String(member.updatedBy || "").trim() || null;
+  }
+
+  return payload;
 }
 
 function normalizeArchive(archive) {
@@ -317,6 +365,7 @@ export async function saveTransactions(transactions) {
       for (const tx of normalizedTransactions) {
         const transactionData = {
           id: tx.id,
+          member_id: tx.memberId || null,
           transaction_date: tx.date,
           payment: tx.payment,
           subtotal: tx.subtotal || tx.total || 0,
@@ -445,6 +494,139 @@ export async function deleteTransaction(transactionId) {
     } catch (error) {
       return true;
     }
+  }
+
+  return true;
+}
+
+// ============================================
+// MEMBER FUNCTIONS
+// ============================================
+
+export async function loadMembers() {
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("members")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return (data || []).map(normalizeMember);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+export async function findMemberByPhoneOrMembershipNumber(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("members")
+      .select("*")
+      .or(`phone.eq.${trimmed},membership_number.eq.${trimmed}`)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return data ? normalizeMember(data) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function saveMember(member) {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error("Supabase is required for member data.");
+  }
+
+  try {
+    const payload = buildMemberPayload(member, true);
+
+    let response = await supabase
+      .from("members")
+      .upsert(payload, { onConflict: "membership_number" })
+      .select("*")
+      .single();
+
+    if (response.error) {
+      const maybeAuditFieldIssue =
+        response.error.message?.includes("created_by") ||
+        response.error.message?.includes("updated_by") ||
+        response.error.message?.includes("consent_version") ||
+        response.error.message?.includes("consent_signed_at");
+
+      if (!maybeAuditFieldIssue) {
+        throw response.error;
+      }
+
+      const fallbackPayload = {
+        id: member.id || undefined,
+        membership_number: String(member.membershipNumber || "").trim(),
+        first_name: String(member.firstName || "").trim(),
+        last_name: String(member.lastName || "").trim(),
+        phone: String(member.phone || "").trim(),
+        email: String(member.email || "").trim() || null,
+        date_of_birth: member.dateOfBirth || null,
+        status: String(member.status || "active").trim() || "active",
+      };
+
+      response = await supabase
+        .from("members")
+        .upsert(fallbackPayload, { onConflict: "membership_number" })
+        .select("*")
+        .single();
+
+      if (response.error) {
+        throw response.error;
+      }
+    }
+
+    return normalizeMember(response.data);
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function saveMemberConsent(consent) {
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    return true;
+  }
+
+  const payload = {
+    member_id: consent.memberId,
+    consent_version: String(consent.consentVersion || "").trim() || "v1",
+    signed_at: consent.signedAt || new Date().toISOString(),
+    signed_by_staff: String(consent.signedByStaff || "").trim() || null,
+    form_snapshot: consent.formSnapshot || {},
+  };
+
+  const { error } = await supabase.from("member_consents").insert(payload);
+  if (error) {
+    throw error;
   }
 
   return true;

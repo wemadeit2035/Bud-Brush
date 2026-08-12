@@ -1,6 +1,7 @@
 export default function TabNav({ activeView, onChangeView }) {
   const tabs = [
     { id: "pos", label: "POS", iconSrc: "/pos.svg" },
+    { id: "members", label: "Members", iconSrc: "/inventory.svg" },
     { id: "inventory", label: "Inventory", iconSrc: "/inventory.svg" },
     { id: "sales", label: "Sales", iconSrc: "/sales.svg" },
     { id: "dashboard", label: "Dashboard", iconSrc: "/dashboard.svg" },

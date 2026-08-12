@@ -12,7 +12,12 @@ export default function CartPanel({
   setTransactions,
   setSyncStatus,
   showToast,
+  members = [],
+  selectedMemberId,
+  setSelectedMemberId,
+  allowGuestCheckout = false,
 }) {
+  const GUEST_MEMBER_VALUE = "__guest__";
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [uberzolAmount, setUberzolAmount] = useState("");
   const [isUberzolEdited, setIsUberzolEdited] = useState(false);
@@ -136,6 +141,27 @@ export default function CartPanel({
       }
     }
 
+    if (!selectedMemberId && !allowGuestCheckout) {
+      showToast(
+        "Member Required",
+        "Select a member before checkout.",
+        "warning",
+      );
+      return;
+    }
+
+    const isGuestCheckout =
+      allowGuestCheckout && selectedMemberId === GUEST_MEMBER_VALUE;
+
+    if (!selectedMemberId && allowGuestCheckout) {
+      showToast(
+        "Member Required",
+        "Select a member or choose Guest checkout.",
+        "warning",
+      );
+      return;
+    }
+
     const bundleItems = bundleSummary.items;
     const items = bundleItems.map((item) => {
       const product = products.find((p) => p.id === item.productId);
@@ -188,8 +214,13 @@ export default function CartPanel({
       }
     }
 
+    if (isGuestCheckout) {
+      note = note ? `${note} | AUDIT: guest checkout` : "AUDIT: guest checkout";
+    }
+
     const transaction = {
       id: transactionId,
+      memberId: isGuestCheckout ? null : selectedMemberId,
       payment: paymentMethod,
       total: total,
       subtotal: subtotalAmount,
@@ -221,6 +252,9 @@ export default function CartPanel({
       // Reset Uberzol state
       setIsUberzolEdited(false);
       setUberzolAmount("");
+      if (allowGuestCheckout) {
+        setSelectedMemberId("");
+      }
 
       setSyncStatus("Transaction recorded!");
       showToast(
@@ -337,6 +371,30 @@ export default function CartPanel({
         )}
       </div>
       <div className="mt-6 rounded-3xl bg-slate-50 p-4">
+        <div className="mb-4 flex items-center justify-between gap-4 text-sm text-slate-600">
+          <span className="shrink-0">Member</span>
+          <select
+            className="w-full rounded-3xl border border-slate-200 bg-white px-4 py-2 text-sm"
+            value={selectedMemberId || ""}
+            onChange={(event) => setSelectedMemberId(event.target.value)}
+          >
+            <option value="">Select a member</option>
+            {allowGuestCheckout && (
+              <option value={GUEST_MEMBER_VALUE}>Guest checkout</option>
+            )}
+            {members.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.membershipNumber} - {member.firstName} {member.lastName}
+              </option>
+            ))}
+          </select>
+        </div>
+        {!allowGuestCheckout && (
+          <div className="mb-4 text-xs text-slate-500">
+            Club policy: member selection is required before checkout.
+          </div>
+        )}
+
         <div className="mb-4 flex items-center justify-between text-sm text-slate-600">
           <span>Payment method</span>
           <select

@@ -7,10 +7,12 @@ import InventoryView from "./components/InventoryView";
 import SalesView from "./components/SalesView";
 import DashboardView from "./components/DashboardView";
 import ArchiveView from "./components/ArchiveView";
+import MembersView from "./components/MembersView";
 import ToastNotification from "./components/ToastNotification";
 import {
   loadProducts,
   loadTransactions,
+  loadMembers,
   saveTransactions,
   loadArchives,
   saveArchive,
@@ -19,10 +21,13 @@ import {
 } from "./services/database";
 
 const AUTH_STORAGE_KEY = "budbrush_is_authenticated";
+const ALLOW_GUEST_CHECKOUT = false;
 
 function App() {
   const [activeView, setActiveView] = useState("pos");
   const [products, setProducts] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [selectedMemberId, setSelectedMemberId] = useState("");
   const [transactions, setTransactions] = useState([]);
   const [cart, setCart] = useState([]);
   const [archives, setArchives] = useState([]);
@@ -308,11 +313,13 @@ function App() {
 
   const initializeApp = async () => {
     const loadedProducts = await loadProducts();
+    const loadedMembers = await loadMembers();
     const loadedTransactions = await loadTransactions();
     setProducts(loadedProducts);
+    setMembers(loadedMembers);
     setTransactions(loadedTransactions);
     setSyncStatus(
-      `Loaded ${loadedProducts.length} items and ${loadedTransactions.length} transactions`,
+      `Loaded ${loadedProducts.length} items, ${loadedMembers.length} members, and ${loadedTransactions.length} transactions`,
     );
 
     const today = new Date().toISOString().slice(0, 10);
@@ -359,6 +366,17 @@ function App() {
                 transactions={transactions}
                 setTransactions={setTransactions}
                 setSyncStatus={setSyncStatus}
+                showToast={showToast}
+                members={members}
+                selectedMemberId={selectedMemberId}
+                setSelectedMemberId={setSelectedMemberId}
+                allowGuestCheckout={ALLOW_GUEST_CHECKOUT}
+              />
+            )}
+            {activeView === "members" && (
+              <MembersView
+                members={members}
+                setMembers={setMembers}
                 showToast={showToast}
               />
             )}

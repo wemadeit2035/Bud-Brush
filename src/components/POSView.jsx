@@ -10,6 +10,10 @@ export default function POSView({
   setTransactions,
   setSyncStatus,
   showToast,
+  members,
+  selectedMemberId,
+  setSelectedMemberId,
+  allowGuestCheckout,
 }) {
   return (
     <div className="space-y-6">
@@ -25,6 +29,10 @@ export default function POSView({
             setTransactions={setTransactions}
             setSyncStatus={setSyncStatus}
             showToast={showToast}
+            members={members}
+            selectedMemberId={selectedMemberId}
+            setSelectedMemberId={setSelectedMemberId}
+            allowGuestCheckout={allowGuestCheckout}
           />
         </div>
       </div>
