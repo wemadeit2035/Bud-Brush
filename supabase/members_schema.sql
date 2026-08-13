@@ -10,6 +10,7 @@ create table if not exists public.members (
   last_name text not null,
   phone text not null,
   email text,
+  id_number text,
   date_of_birth date,
   status text not null default 'active',
   consent_version text,
@@ -19,10 +20,14 @@ create table if not exists public.members (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint members_status_check check (status in ('active', 'suspended', 'inactive'))
+
 );
+alter table public.members
+  add column if not exists id_number text;
 
 create index if not exists idx_members_phone on public.members(phone);
 create index if not exists idx_members_membership_number on public.members(membership_number);
+create index if not exists idx_members_id_number on public.members(id_number);
 
 create table if not exists public.member_consents (
   id uuid primary key default gen_random_uuid(),

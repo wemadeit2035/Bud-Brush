@@ -18,21 +18,33 @@ function validateEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
 }
 
+function validateIdNumber(idNumber) {
+  const normalized = String(idNumber || "").trim();
+  return /^[0-9A-Za-z]{6,20}$/.test(normalized);
+}
+
 function buildMembershipNumber() {
   const year = new Date().getFullYear();
   const token = Math.random().toString(36).slice(2, 8).toUpperCase();
   return `MBR-${year}-${token}`;
 }
 
-export default function MembersView({ members, setMembers, showToast }) {
+export default function MembersView({
+  members,
+  setMembers,
+  transactions = [],
+  showToast,
+}) {
   const [search, setSearch] = useState("");
   const [staffUser, setStaffUser] = useState("");
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState(null);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
     phone: "",
     email: "",
+    idNumber: "",
     dateOfBirth: "",
   });
 
@@ -62,6 +74,30 @@ export default function MembersView({ members, setMembers, showToast }) {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
+  const selectedMember = useMemo(
+    () => members.find((member) => member.id === selectedMemberId) || null,
+    [members, selectedMemberId],
+  );
+
+  const memberContributions = useMemo(() => {
+    const totals = new Map();
+    transactions.forEach((tx) => {
+      if (!tx.memberId) return;
+      totals.set(tx.memberId, (totals.get(tx.memberId) || 0) + (tx.total || 0));
+    });
+    return totals;
+  }, [transactions]);
+
+  const getMemberTotalContribution = (memberId) =>
+    memberContributions.get(memberId) || 0;
+
+  const selectedMemberTransactions = useMemo(() => {
+    if (!selectedMemberId) return [];
+    return transactions
+      .filter((tx) => tx.memberId === selectedMemberId)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [transactions, selectedMemberId]);
+
   const handleRegisterMember = async (event) => {
     event.preventDefault();
 
@@ -69,11 +105,12 @@ export default function MembersView({ members, setMembers, showToast }) {
     const lastName = form.lastName.trim();
     const phone = form.phone.trim();
     const email = form.email.trim();
+    const idNumber = form.idNumber.trim();
 
-    if (!firstName || !lastName || !phone) {
+    if (!firstName || !lastName || !phone || !idNumber) {
       showToast(
         "Missing Fields",
-        "First name, last name, and phone are required.",
+        "First name, last name, phone, and ID number are required.",
         "warning",
       );
       return;
@@ -83,6 +120,15 @@ export default function MembersView({ members, setMembers, showToast }) {
       showToast(
         "Invalid Phone",
         "Use a valid South African mobile number, e.g. 0821234567 or +27821234567.",
+        "warning",
+      );
+      return;
+    }
+
+    if (!validateIdNumber(idNumber)) {
+      showToast(
+        "Invalid ID Number",
+        "Enter a valid ID number (6-20 alphanumeric characters).",
         "warning",
       );
       return;
@@ -123,6 +169,7 @@ export default function MembersView({ members, setMembers, showToast }) {
         lastName,
         phone,
         email,
+        idNumber,
         dateOfBirth: form.dateOfBirth || null,
         status: "active",
         consentVersion: CONSENT_VERSION,
@@ -141,6 +188,7 @@ export default function MembersView({ members, setMembers, showToast }) {
           lastName,
           phone,
           email: email || null,
+          idNumber,
           dateOfBirth: form.dateOfBirth || null,
           status: "active",
         },
@@ -152,6 +200,7 @@ export default function MembersView({ members, setMembers, showToast }) {
         lastName: "",
         phone: "",
         email: "",
+        idNumber: "",
         dateOfBirth: "",
       });
       setConsentAccepted(false);
@@ -234,6 +283,15 @@ export default function MembersView({ members, setMembers, showToast }) {
               onChange={(event) => updateFormField("phone", event.target.value)}
             />
             <input
+              type="text"
+              placeholder="ID number *"
+              className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3"
+              value={form.idNumber}
+              onChange={(event) =>
+                updateFormField("idNumber", event.target.value)
+              }
+            />
+            <input
               type="email"
               placeholder="Email (optional)"
               className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3"
@@ -311,7 +369,18 @@ export default function MembersView({ members, setMembers, showToast }) {
                     {member.email ? ` | ${member.email}` : ""}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200"
+                    onClick={() =>
+                      setSelectedMemberId((currentId) =>
+                        currentId === member.id ? null : member.id,
+                      )
+                    }
+                  >
+                    {selectedMemberId === member.id ? "Hide" : "View"}
+                  </button>
                   <select
                     className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm"
                     value={member.status || "active"}
@@ -336,6 +405,98 @@ export default function MembersView({ members, setMembers, showToast }) {
           </div>
         )}
       </div>
+
+      {selectedMember && (
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-base font-semibold">Member Details</h3>
+            <button
+              type="button"
+              className="text-sm text-slate-500 hover:text-slate-700"
+              onClick={() => setSelectedMemberId(null)}
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="grid gap-3 text-sm text-slate-700 md:grid-cols-2">
+            <div>
+              <span className="text-slate-400">Name</span>
+              <div className="font-semibold">
+                {selectedMember.firstName} {selectedMember.lastName}
+              </div>
+            </div>
+            <div>
+              <span className="text-slate-400">Membership Number</span>
+              <div className="font-semibold">
+                {selectedMember.membershipNumber}
+              </div>
+            </div>
+            <div>
+              <span className="text-slate-400">Phone</span>
+              <div className="font-semibold">{selectedMember.phone}</div>
+            </div>
+            <div>
+              <span className="text-slate-400">Email</span>
+              <div className="font-semibold">{selectedMember.email || "-"}</div>
+            </div>
+            <div>
+              <span className="text-slate-400">ID Number</span>
+              <div className="font-semibold">
+                {selectedMember.idNumber || "-"}
+              </div>
+            </div>
+            <div>
+              <span className="text-slate-400">Date of Birth</span>
+              <div className="font-semibold">
+                {selectedMember.dateOfBirth || "-"}
+              </div>
+            </div>
+            <div>
+              <span className="text-slate-400">Status</span>
+              <div className="font-semibold capitalize">
+                {selectedMember.status}
+              </div>
+            </div>
+            <div>
+              <span className="text-slate-400">
+                Total Historical Contribution
+              </span>
+              <div className="text-lg font-semibold text-emerald-600">
+                R{getMemberTotalContribution(selectedMember.id).toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h4 className="mb-2 text-sm font-semibold text-slate-600">
+              Purchase History ({selectedMemberTransactions.length})
+            </h4>
+            {selectedMemberTransactions.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">
+                No transactions recorded for this member yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {selectedMemberTransactions.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                  >
+                    <span className="text-slate-500">
+                      {new Date(tx.date).toLocaleString()}
+                    </span>
+                    <span className="text-slate-500">{tx.payment}</span>
+                    <span className="font-semibold">
+                      R{Number(tx.total || 0).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

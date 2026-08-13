@@ -377,6 +377,7 @@ function App() {
               <MembersView
                 members={members}
                 setMembers={setMembers}
+                transactions={transactions}
                 showToast={showToast}
               />
             )}

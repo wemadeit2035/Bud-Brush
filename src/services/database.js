@@ -107,6 +107,7 @@ function normalizeMember(member) {
     lastName: member.last_name || member.lastName || "",
     phone: member.phone || "",
     email: member.email || "",
+    idNumber: member.id_number || member.idNumber || "",
     dateOfBirth: member.date_of_birth || member.dateOfBirth || "",
     status: member.status || "active",
     consentVersion: member.consent_version || member.consentVersion || "",
@@ -130,6 +131,7 @@ function buildMemberPayload(member, includeAuditFields = true) {
     last_name: String(member.lastName || "").trim(),
     phone: String(member.phone || "").trim(),
     email: String(member.email || "").trim() || null,
+    id_number: String(member.idNumber || "").trim() || null,
     date_of_birth: member.dateOfBirth || null,
     status: String(member.status || "active").trim() || "active",
     consent_version: String(member.consentVersion || "").trim() || null,
@@ -575,7 +577,8 @@ export async function saveMember(member) {
         response.error.message?.includes("created_by") ||
         response.error.message?.includes("updated_by") ||
         response.error.message?.includes("consent_version") ||
-        response.error.message?.includes("consent_signed_at");
+        response.error.message?.includes("consent_signed_at") ||
+        response.error.message?.includes("id_number");
 
       if (!maybeAuditFieldIssue) {
         throw response.error;
