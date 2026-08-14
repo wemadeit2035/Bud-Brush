@@ -57,18 +57,6 @@ export default function PreRollSummary({ products, transactions }) {
           <div className="text-sm text-slate-500">As of</div>
           <div className="mt-2 font-semibold">{today.toLocaleDateString()}</div>
         </div>
-        <div className="rounded-3xl bg-slate-50 p-4 text-center">
-          <div className="text-sm text-slate-500">Start</div>
-          <div className="mt-2 font-semibold">
-            {soldRows.reduce((sum, row) => sum + row.startStock, 0)}
-          </div>
-        </div>
-        <div className="rounded-3xl bg-slate-50 p-4 text-center">
-          <div className="text-sm text-slate-500">Remaining</div>
-          <div className="mt-2 font-semibold">
-            {soldRows.reduce((sum, row) => sum + row.remaining, 0)}
-          </div>
-        </div>
       </div>
       <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200">
         <table className="min-w-full text-left text-sm text-slate-700">

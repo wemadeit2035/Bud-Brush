@@ -3,18 +3,20 @@ import { useMemo, useState } from "react";
 export default function ProductGrid({ products, cart, setCart }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [showOutOfStock, setShowOutOfStock] = useState(false);
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
     return products.filter((product) => {
+      const stockMatch = showOutOfStock || product.stock > 0;
       const filterMatch =
         filter === "all" || product.type?.toLowerCase() === filter;
       const searchMatch = `${product.name} ${product.category} ${product.type}`
         .toLowerCase()
         .includes(query);
-      return filterMatch && searchMatch;
+      return stockMatch && filterMatch && searchMatch;
     });
-  }, [filter, products, search]);
+  }, [filter, products, search, showOutOfStock]);
 
   const addToCart = (productId, qty = 1) => {
     const existing = cart.find((item) => item.productId === productId);
@@ -103,6 +105,14 @@ export default function ProductGrid({ products, cart, setCart }) {
               {option.label}
             </button>
           ))}
+          <label className="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={showOutOfStock}
+              onChange={(event) => setShowOutOfStock(event.target.checked)}
+            />
+            Show out of stock
+          </label>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
