@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  deleteMember,
   findMemberByPhoneOrMembershipNumber,
   saveMember,
   saveMemberConsent,
@@ -219,31 +220,27 @@ export default function MembersView({
     }
   };
 
-  const handleStatusChange = (memberId, status) => {
-    setMembers((currentMembers) =>
-      currentMembers.map((member) =>
-        member.id === memberId ? { ...member, status } : member,
-      ),
+  const handleRemoveMember = async (member) => {
+    const confirmed = window.confirm(
+      `Remove ${member.firstName} ${member.lastName} (${member.membershipNumber})? This cannot be undone.`,
     );
-  };
+    if (!confirmed) return;
 
-  const saveStatusUpdate = async (member) => {
     try {
-      const updated = await saveMember({
-        ...member,
-        updatedBy: staffUser.trim() || "pos-staff",
-      });
-
+      await deleteMember(member.id);
       setMembers((currentMembers) =>
-        currentMembers.map((item) => (item.id === updated.id ? updated : item)),
+        currentMembers.filter((item) => item.id !== member.id),
       );
+      if (selectedMemberId === member.id) {
+        setSelectedMemberId(null);
+      }
       showToast(
-        "Status Updated",
-        `Updated ${member.membershipNumber}.`,
+        "Member Removed",
+        `${member.firstName} ${member.lastName} was removed.`,
         "success",
       );
     } catch (error) {
-      showToast("Update Failed", "Could not update member status.", "error");
+      showToast("Remove Failed", "Could not remove this member.", "error");
     }
   };
 
@@ -381,23 +378,12 @@ export default function MembersView({
                   >
                     {selectedMemberId === member.id ? "Hide" : "View"}
                   </button>
-                  <select
-                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm"
-                    value={member.status || "active"}
-                    onChange={(event) =>
-                      handleStatusChange(member.id, event.target.value)
-                    }
-                  >
-                    <option value="active">Active</option>
-                    <option value="suspended">Suspended</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
                   <button
                     type="button"
-                    className="rounded-full bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
-                    onClick={() => saveStatusUpdate(member)}
+                    className="rounded-full bg-rose-50 px-4 py-2 text-sm text-rose-700 hover:bg-rose-100"
+                    onClick={() => handleRemoveMember(member)}
                   >
-                    Save
+                    Remove
                   </button>
                 </div>
               </div>

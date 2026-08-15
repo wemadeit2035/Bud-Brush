@@ -176,8 +176,8 @@ export default function InventoryView({ products, setProducts, showToast }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-      <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
-        <div className="mb-6 flex items-center justify-between">
+      <div className="rounded-3xl bg-white p-4 shadow-sm border border-slate-200 sm:p-6">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <img
               src="/inventory.svg"
@@ -203,7 +203,69 @@ export default function InventoryView({ products, setProducts, showToast }) {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
-        <div className="w-full max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-3xl border border-slate-200">
+        <div className="space-y-3 sm:hidden">
+          {filteredProducts.map((product) => (
+            <div
+              key={product.id}
+              className="rounded-3xl border border-slate-200 p-4"
+            >
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold">{product.name}</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span
+                      className={`rounded-full px-2 py-1 ${getCategoryBadgeClass(product.category)}`}
+                    >
+                      {product.category}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-1 ${getTypeBadgeClass(product.type)}`}
+                    >
+                      {product.type}
+                    </span>
+                  </div>
+                </div>
+                <span className="shrink-0 whitespace-nowrap text-sm font-semibold">
+                  R{product.price}
+                </span>
+              </div>
+              <div className="mb-3 flex items-center justify-between text-sm text-slate-500">
+                <span>{product.stock} in stock</span>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs ${
+                    product.stock < 5
+                      ? "bg-rose-100 text-rose-700"
+                      : "bg-emerald-100 text-emerald-700"
+                  }`}
+                >
+                  {product.stock < 5 ? "Low stock" : "In stock"}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
+                  onClick={() => handleEdit(product)}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+                  onClick={() => handleDelete(product.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          {filteredProducts.length === 0 ? (
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+              No products found.
+            </div>
+          ) : null}
+        </div>
+        <div className="hidden w-full max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-3xl border border-slate-200 sm:block">
           <table className="min-w-[640px] text-left text-sm text-slate-700">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
@@ -269,7 +331,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
           </table>
         </div>
       </div>
-      <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
+      <div className="rounded-3xl bg-white p-4 shadow-sm border border-slate-200 sm:p-6">
         <div className="mb-6">
           <h2 className="text-lg font-semibold">Add / Edit Product</h2>
         </div>

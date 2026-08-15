@@ -136,3 +136,37 @@ on public.member_consents
 for insert
 to anon
 with check (true);
+
+-- Allow member deletion; keep transaction history but detach the member link
+alter table public.transactions drop constraint if exists transactions_member_id_fkey;
+alter table public.transactions
+  add constraint transactions_member_id_fkey
+  foreign key (member_id) references public.members(id) on delete set null;
+
+drop policy if exists members_delete_authenticated on public.members;
+create policy members_delete_authenticated
+on public.members
+for delete
+to authenticated
+using (true);
+
+drop policy if exists members_delete_anon on public.members;
+create policy members_delete_anon
+on public.members
+for delete
+to anon
+using (true);
+
+drop policy if exists consents_delete_authenticated on public.member_consents;
+create policy consents_delete_authenticated
+on public.member_consents
+for delete
+to authenticated
+using (true);
+
+drop policy if exists consents_delete_anon on public.member_consents;
+create policy consents_delete_anon
+on public.member_consents
+for delete
+to anon
+using (true);

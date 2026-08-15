@@ -635,6 +635,31 @@ export async function saveMemberConsent(consent) {
   return true;
 }
 
+export async function deleteMember(memberId) {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error("Supabase is required for member data.");
+  }
+
+  const { data, error } = await supabase
+    .from("members")
+    .delete()
+    .eq("id", memberId)
+    .select("id");
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error(
+      "Member was not deleted. Check Supabase RLS delete policies for the members table.",
+    );
+  }
+
+  return true;
+}
+
 // ============================================
 // ARCHIVE FUNCTIONS
 // ============================================
