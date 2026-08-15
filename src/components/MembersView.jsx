@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   deleteMember,
   findMemberByPhoneOrMembershipNumber,
@@ -40,6 +40,7 @@ export default function MembersView({
   const [staffUser, setStaffUser] = useState("");
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState(null);
+  const memberDetailsRef = useRef(null);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -370,11 +371,19 @@ export default function MembersView({
                   <button
                     type="button"
                     className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200"
-                    onClick={() =>
+                    onClick={() => {
                       setSelectedMemberId((currentId) =>
                         currentId === member.id ? null : member.id,
-                      )
-                    }
+                      );
+                      if (selectedMemberId !== member.id) {
+                        requestAnimationFrame(() =>
+                          memberDetailsRef.current?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          }),
+                        );
+                      }
+                    }}
                   >
                     {selectedMemberId === member.id ? "Hide" : "View"}
                   </button>
@@ -393,7 +402,10 @@ export default function MembersView({
       </div>
 
       {selectedMember && (
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div
+          ref={memberDetailsRef}
+          className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-base font-semibold">Member Details</h3>
             <button

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { saveProducts } from "../services/database";
 
 const createEmptyBundle = () => ({
@@ -11,6 +11,7 @@ const createEmptyBundle = () => ({
 export default function InventoryView({ products, setProducts, showToast }) {
   const [search, setSearch] = useState("");
   const [editingProduct, setEditingProduct] = useState(null);
+  const nameInputRef = useRef(null);
   const [formState, setFormState] = useState({
     name: "",
     category: "",
@@ -65,6 +66,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
       stock: "",
       bundles: [],
     });
+    nameInputRef.current?.focus();
   };
 
   const handleEdit = (product) => {
@@ -86,6 +88,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
           }))
         : [],
     });
+    nameInputRef.current?.focus();
   };
 
   const updateBundleField = (bundleId, field, value) => {
@@ -342,6 +345,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
             </label>
             <input
               type="text"
+              ref={nameInputRef}
               className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3"
               value={formState.name}
               onChange={(event) =>
