@@ -3,7 +3,7 @@ export default function TopBar({ syncStatus, onNewDay }) {
     <header className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
         <img
-          src="/b-b.png"
+          src="/flower.png"
           alt="Bud & Brush"
           className="h-12 w-12 object-cover"
         />
