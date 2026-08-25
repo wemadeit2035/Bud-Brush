@@ -1,18 +1,28 @@
 import { useState } from "react";
+import { signInWithEmail } from "../services/database";
 
 export default function LoginOverlay({ visible, onAuthenticate }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!visible) return null;
 
-  const handleSubmit = () => {
-    if (password === "admin" || password === "password") {
-      onAuthenticate();
-      return;
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const session = await signInWithEmail(email, password);
+      await onAuthenticate(session);
+    } catch (submitError) {
+      setError(submitError.message || "Unable to sign in.");
+      setPassword("");
+    } finally {
+      setIsSubmitting(false);
     }
-    setError(true);
-    setPassword("");
   };
 
   return (
@@ -25,27 +35,38 @@ export default function LoginOverlay({ visible, onAuthenticate }) {
             className="mx-auto mb-4 h-20 w-20 object-cover"
           />
         </div>
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <input
+            type="email"
+            autoComplete="email"
+            placeholder="Email address"
+            className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-sky-400"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
           <input
             type="password"
-            placeholder="Enter admin password"
+            autoComplete="current-password"
+            placeholder="Password"
             className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-sky-400"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            required
           />
           {error && (
             <div className="rounded-3xl bg-rose-100 px-4 py-3 text-sm text-rose-700">
-              Invalid password. Use "admin" or "password".
+              {error}
             </div>
           )}
           <button
-            type="button"
+            type="submit"
             className="w-full rounded-3xl bg-slate-900 px-4 py-3 text-white hover:bg-slate-800"
-            onClick={handleSubmit}
+            disabled={isSubmitting}
           >
-            Access POS
+            {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );

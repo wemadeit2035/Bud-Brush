@@ -8,19 +8,24 @@ import SalesView from "./components/SalesView";
 import DashboardView from "./components/DashboardView";
 import ArchiveView from "./components/ArchiveView";
 import MembersView from "./components/MembersView";
+import StaffAccountsView from "./components/StaffAccountsView";
 import ToastNotification from "./components/ToastNotification";
 import {
+  getAuthenticatedSession,
+  getCurrentUserRole,
   loadProducts,
   loadTransactions,
   loadMembers,
+  onAuthStateChange,
   saveTransactions,
   loadArchives,
   saveArchive,
   deleteArchive,
   deleteTransaction,
+  signOut,
 } from "./services/database";
+import { canAccessView, isValidRole } from "./constants/accessControl";
 
-const AUTH_STORAGE_KEY = "budbrush_is_authenticated";
 const ALLOW_GUEST_CHECKOUT = false;
 
 function App() {
@@ -45,13 +50,9 @@ function App() {
       return [];
     }
   });
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    try {
-      return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
-    } catch (error) {
-      return false;
-    }
-  });
+  const [session, setSession] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState("Connecting...");
   const [toast, setToast] = useState(null);
 
@@ -76,11 +77,74 @@ function App() {
     } catch (error) {}
   }, [dailyAdjustments]);
 
+  const resolveSession = async (nextSession) => {
+    if (!nextSession?.user?.id) {
+      setSession(null);
+      setUserRole(null);
+      setIsAuthReady(true);
+      return;
+    }
+
+    const role = await getCurrentUserRole(nextSession.user.id);
+    if (!isValidRole(role)) {
+      await signOut();
+      throw new Error("This account has not been assigned an access level.");
+    }
+
+    setSession(nextSession);
+    setUserRole(role);
+    setIsAuthReady(true);
+  };
+
   useEffect(() => {
+    let isMounted = true;
+
+    const loadSession = async () => {
+      try {
+        const savedSession = await getAuthenticatedSession();
+        if (isMounted) await resolveSession(savedSession);
+      } catch (error) {
+        if (isMounted) {
+          setSession(null);
+          setUserRole(null);
+          setIsAuthReady(true);
+        }
+      }
+    };
+
+    loadSession();
+    const unsubscribe = onAuthStateChange(async (_event, nextSession) => {
+      try {
+        if (isMounted) await resolveSession(nextSession);
+      } catch (error) {
+        if (isMounted) {
+          setSession(null);
+          setUserRole(null);
+          setIsAuthReady(true);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const isAuthenticated = Boolean(session && userRole);
+
+  useEffect(() => {
+    if (!isAuthenticated || canAccessView(userRole, activeView)) return;
+    setActiveView("pos");
+  }, [activeView, isAuthenticated, userRole]);
+
+  const handleSignOut = async () => {
     try {
-      localStorage.setItem(AUTH_STORAGE_KEY, String(isAuthenticated));
-    } catch (error) {}
-  }, [isAuthenticated]);
+      await signOut();
+    } catch (error) {
+      showToast("Sign out failed", "Please try again.", "error");
+    }
+  };
 
   const loadArchiveData = async () => {
     const loadedArchives = await loadArchives();
@@ -322,42 +386,51 @@ function App() {
       `Loaded ${loadedProducts.length} items, ${loadedMembers.length} members, and ${loadedTransactions.length} transactions`,
     );
 
-    const today = new Date().toISOString().slice(0, 10);
-    const lastRun = localStorage.getItem("bb_last_run_date");
-    if (lastRun && lastRun !== today) {
-      const result = await archiveSalesForDate(lastRun);
-      if (result.archived) {
-        showToast(
-          "📅 New Day",
-          `Archived ${result.count} transactions from ${lastRun}. Starting fresh!`,
-          "info",
-        );
+    if (userRole === "admin") {
+      const today = new Date().toISOString().slice(0, 10);
+      const lastRun = localStorage.getItem("bb_last_run_date");
+      if (lastRun && lastRun !== today) {
+        const result = await archiveSalesForDate(lastRun);
+        if (result.archived) {
+          showToast(
+            "📅 New Day",
+            `Archived ${result.count} transactions from ${lastRun}. Starting fresh!`,
+            "info",
+          );
+        }
       }
+      localStorage.setItem("bb_last_run_date", today);
+      await loadArchiveData();
     }
-    localStorage.setItem("bb_last_run_date", today);
-    await loadArchiveData();
   };
 
   useEffect(() => {
     if (!isAuthenticated) return;
     initializeApp();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userRole]);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 md:overflow-x-visible">
       <LoginOverlay
-        visible={!isAuthenticated}
-        onAuthenticate={() => setIsAuthenticated(true)}
+        visible={isAuthReady && !isAuthenticated}
+        onAuthenticate={resolveSession}
       />
       {isAuthenticated && (
         <div className="space-y-6 p-4 lg:p-8">
           <TopBar
             syncStatus={syncStatus}
             onNewDay={clearTodaySalesWithArchive}
+            user={session.user}
+            userRole={userRole}
+            onSignOut={handleSignOut}
           />
-          <TabNav activeView={activeView} onChangeView={setActiveView} />
+          <TabNav
+            activeView={activeView}
+            onChangeView={setActiveView}
+            userRole={userRole}
+          />
           <div>
-            {activeView === "pos" && (
+            {activeView === "pos" && canAccessView(userRole, "pos") && (
               <POSView
                 products={products}
                 cart={cart}
@@ -373,22 +446,26 @@ function App() {
                 allowGuestCheckout={ALLOW_GUEST_CHECKOUT}
               />
             )}
-            {activeView === "members" && (
+            {activeView === "members" && canAccessView(userRole, "members") && (
               <MembersView
                 members={members}
                 setMembers={setMembers}
                 transactions={transactions}
                 showToast={showToast}
+                user={session.user}
+                userRole={userRole}
               />
             )}
-            {activeView === "inventory" && (
-              <InventoryView
-                products={products}
-                setProducts={setProducts}
-                showToast={showToast}
-              />
-            )}
-            {activeView === "sales" && (
+            {activeView === "inventory" &&
+              canAccessView(userRole, "inventory") && (
+                <InventoryView
+                  products={products}
+                  setProducts={setProducts}
+                  showToast={showToast}
+                  userRole={userRole}
+                />
+              )}
+            {activeView === "sales" && canAccessView(userRole, "sales") && (
               <SalesView
                 products={products}
                 transactions={transactions}
@@ -398,14 +475,15 @@ function App() {
                 showToast={showToast}
               />
             )}
-            {activeView === "dashboard" && (
-              <DashboardView
-                products={products}
-                transactions={transactions}
-                archives={archives}
-              />
-            )}
-            {activeView === "archive" && (
+            {activeView === "dashboard" &&
+              canAccessView(userRole, "dashboard") && (
+                <DashboardView
+                  products={products}
+                  transactions={transactions}
+                  archives={archives}
+                />
+              )}
+            {activeView === "archive" && canAccessView(userRole, "archive") && (
               <ArchiveView
                 archives={archives}
                 currency={currency}
@@ -413,6 +491,10 @@ function App() {
                 onDeleteArchive={handleDeleteArchive}
               />
             )}
+            {activeView === "staffAccounts" &&
+              canAccessView(userRole, "staffAccounts") && (
+                <StaffAccountsView showToast={showToast} />
+              )}
           </div>
         </div>
       )}

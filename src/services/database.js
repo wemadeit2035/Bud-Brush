@@ -24,6 +24,99 @@ function getSupabaseClient() {
   }
 }
 
+export async function signInWithEmail(email, password) {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error("Supabase authentication is not configured.");
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: String(email || "").trim(),
+    password,
+  });
+
+  if (error) throw error;
+  return data.session;
+}
+
+export async function signOut() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+export async function getAuthenticatedSession() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data.session;
+}
+
+export async function getCurrentUserRole(userId) {
+  const supabase = getSupabaseClient();
+  if (!supabase || !userId) return null;
+
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.role || null;
+}
+
+export function onAuthStateChange(callback) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return () => {};
+
+  const { data } = supabase.auth.onAuthStateChange(callback);
+  return () => data.subscription.unsubscribe();
+}
+
+export async function loadStaffAccounts() {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error("Supabase is required for account data.");
+
+  const { data, error } = await supabase
+    .from("staff_accounts")
+    .select("user_id, email, role, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createStaffAccount(email, role) {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error("Supabase is required for account creation.");
+
+  const { data, error } = await supabase.functions.invoke(
+    "create-staff-account",
+    {
+      body: { email, role },
+    },
+  );
+
+  if (error) throw error;
+  return data;
+}
+
+async function getAuthenticatedRole(supabase) {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  if (!data.user) throw new Error("You must be signed in.");
+
+  const role = await getCurrentUserRole(data.user.id);
+  if (!role)
+    throw new Error("This account has not been assigned an access level.");
+  return role;
+}
+
 // ===== LOCAL STORAGE HELPERS =====
 function readLocalStorage(key) {
   try {
@@ -190,74 +283,64 @@ function generateId() {
 
 export async function loadProducts() {
   const supabase = getSupabaseClient();
+  if (!supabase) throw new Error("Supabase is required for product data.");
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .order("name", { ascending: true });
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .order("name", { ascending: true });
 
-      if (error) throw error;
-      if (data && data.length > 0) {
-        return data.map(normalizeProduct);
-      }
-    } catch (error) {}
-  }
-
-  return readLocalStorage(PRODUCTS_KEY);
+  if (error) throw error;
+  return (data || []).map(normalizeProduct);
 }
 
 export async function saveProducts(products) {
   const supabase = getSupabaseClient();
   const normalizedProducts = (products || []).map(normalizeProduct);
+  if (!supabase) throw new Error("Supabase is required for product data.");
 
-  // Always save to localStorage as backup
-  writeLocalStorage(PRODUCTS_KEY, normalizedProducts);
+  const role = await getAuthenticatedRole(supabase);
+  if (role === "staff") {
+    for (const product of normalizedProducts) {
+      const { error } = await supabase.rpc("adjust_product_stock", {
+        product_id: product.id,
+        new_stock: product.stock,
+      });
 
-  if (supabase) {
-    try {
-      // Keep Supabase aligned with the current client list:
-      // upsert current products, remove products no longer present.
-      const { data: existingRows, error: existingError } = await supabase
-        .from("products")
-        .select("id");
-
-      if (existingError) {
-        throw existingError;
-      }
-
-      const incomingIds = new Set(
-        normalizedProducts.map((product) => product.id),
-      );
-      const staleIds = (existingRows || [])
-        .map((row) => String(row.id))
-        .filter((id) => !incomingIds.has(id));
-
-      if (normalizedProducts.length > 0) {
-        const { error } = await supabase
-          .from("products")
-          .upsert(normalizedProducts, { onConflict: "id" });
-
-        if (error) {
-          throw error;
-        }
-      }
-
-      if (staleIds.length > 0) {
-        const { error: deleteError } = await supabase
-          .from("products")
-          .delete()
-          .in("id", staleIds);
-
-        if (deleteError) {
-          throw deleteError;
-        }
-      }
-      return true;
-    } catch (error) {
-      return true;
+      if (error) throw error;
     }
+    return true;
+  }
+
+  if (role !== "admin") {
+    throw new Error("You are not allowed to manage products.");
+  }
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("products")
+    .select("id");
+
+  if (existingError) throw existingError;
+
+  const incomingIds = new Set(normalizedProducts.map((product) => product.id));
+  const staleIds = (existingRows || [])
+    .map((row) => String(row.id))
+    .filter((id) => !incomingIds.has(id));
+
+  if (normalizedProducts.length > 0) {
+    const { error } = await supabase
+      .from("products")
+      .upsert(normalizedProducts, { onConflict: "id" });
+
+    if (error) throw error;
+  }
+
+  if (staleIds.length > 0) {
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .in("id", staleIds);
+    if (error) throw error;
   }
 
   return true;
@@ -269,60 +352,47 @@ export async function saveProducts(products) {
 
 export async function loadTransactions() {
   const supabase = getSupabaseClient();
+  if (!supabase) throw new Error("Supabase is required for transaction data.");
 
-  if (supabase) {
-    try {
-      const { data: transactionRows, error: transactionError } = await supabase
-        .from("transactions")
-        .select("*")
-        .order("transaction_date", { ascending: false });
+  const { data: transactionRows, error: transactionError } = await supabase
+    .from("transactions")
+    .select("*")
+    .order("transaction_date", { ascending: false });
 
-      if (transactionError) {
-        throw transactionError;
-      }
+  if (transactionError) throw transactionError;
+  if (!transactionRows || transactionRows.length === 0) return [];
 
-      if (!transactionRows || transactionRows.length === 0) {
-        return [];
-      }
+  const transactionIds = transactionRows.map((item) => item.id);
+  const { data: itemRows, error: itemsError } = await supabase
+    .from("transaction_items")
+    .select("*")
+    .in("transaction_id", transactionIds);
 
-      const transactionIds = transactionRows.map((item) => item.id);
-      const { data: itemRows, error: itemsError } = await supabase
-        .from("transaction_items")
-        .select("*")
-        .in("transaction_id", transactionIds);
+  if (itemsError) throw itemsError;
 
-      if (itemsError) {
-        throw itemsError;
-      }
+  const itemsByTransaction = {};
+  (itemRows || []).forEach((item) => {
+    if (!itemsByTransaction[item.transaction_id]) {
+      itemsByTransaction[item.transaction_id] = [];
+    }
+    itemsByTransaction[item.transaction_id].push(item);
+  });
 
-      const itemsByTransaction = {};
-      (itemRows || []).forEach((item) => {
-        if (!itemsByTransaction[item.transaction_id]) {
-          itemsByTransaction[item.transaction_id] = [];
-        }
-        itemsByTransaction[item.transaction_id].push(item);
-      });
-
-      const transactions = transactionRows.map((transaction) =>
-        normalizeTransaction({
-          ...transaction,
-          transaction_items: itemsByTransaction[transaction.id] || [],
-        }),
-      );
-      return transactions;
-    } catch (error) {}
-  }
-
-  const localData = readLocalStorage(TRANSACTIONS_KEY);
-  return localData;
+  return transactionRows.map((transaction) =>
+    normalizeTransaction({
+      ...transaction,
+      transaction_items: itemsByTransaction[transaction.id] || [],
+    }),
+  );
 }
 
 export async function saveTransactions(transactions) {
   const supabase = getSupabaseClient();
   const normalizedTransactions = (transactions || []).map(normalizeTransaction);
-
-  // Always save to localStorage as backup
-  writeLocalStorage(TRANSACTIONS_KEY, normalizedTransactions);
+  if (!supabase) throw new Error("Supabase is required for transaction data.");
+  if ((await getAuthenticatedRole(supabase)) !== "admin") {
+    throw new Error("You are not allowed to synchronize transactions.");
+  }
 
   if (supabase) {
     try {
@@ -426,34 +496,77 @@ export async function saveTransactions(transactions) {
 
       return true;
     } catch (error) {
-      return true;
+      throw error;
     }
   }
 
-  return true;
+  return false;
 }
 
 export async function saveTransaction(transaction) {
-  const transactions = await loadTransactions();
-  const normalizedTx = normalizeTransaction(transaction);
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error("Supabase is required for transaction data.");
 
-  // Generate ID if not provided
+  const normalizedTx = normalizeTransaction(transaction);
   if (!normalizedTx.id) {
     normalizedTx.id = generateId();
   }
 
-  // Check if transaction already exists
-  const existingIndex = transactions.findIndex(
-    (tx) => tx.id === normalizedTx.id,
-  );
-  if (existingIndex >= 0) {
-    transactions[existingIndex] = normalizedTx;
+  const transactionData = {
+    id: normalizedTx.id,
+    member_id: normalizedTx.memberId || null,
+    transaction_date: normalizedTx.date,
+    payment: normalizedTx.payment,
+    subtotal: normalizedTx.subtotal || normalizedTx.total || 0,
+    discount: normalizedTx.discount || 0,
+    total: normalizedTx.total || 0,
+    note: normalizedTx.note || null,
+    item_count: normalizedTx.items.length,
+  };
+  const itemData = normalizedTx.items.map((item) => ({
+    transaction_id: normalizedTx.id,
+    product_id: String(item.productId || ""),
+    product_name: item.productName || "",
+    quantity: Number(item.quantity) || 0,
+    unit_price: Number(item.unitPrice) || 0,
+    line_total: Number(item.lineTotal) || 0,
+    is_bundle: Boolean(item.isBundle),
+    bundle_discount: Number(item.bundleDiscount) || 0,
+    custom_price: Boolean(item.customPrice),
+  }));
+
+  const { data: existing, error: existingError } = await supabase
+    .from("transactions")
+    .select("id")
+    .eq("id", normalizedTx.id)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing) {
+    const { error } = await supabase
+      .from("transactions")
+      .update(transactionData)
+      .eq("id", normalizedTx.id);
+    if (error) throw error;
+
+    const { error: deleteItemsError } = await supabase
+      .from("transaction_items")
+      .delete()
+      .eq("transaction_id", normalizedTx.id);
+    if (deleteItemsError) throw deleteItemsError;
   } else {
-    transactions.push(normalizedTx);
+    const { error } = await supabase
+      .from("transactions")
+      .insert(transactionData);
+    if (error) throw error;
   }
 
-  const result = await saveTransactions(transactions);
-  return result;
+  if (itemData.length > 0) {
+    const { error } = await supabase.from("transaction_items").insert(itemData);
+    if (error) throw error;
+  }
+
+  return true;
 }
 
 export async function deleteTransaction(transactionId) {
@@ -564,7 +677,7 @@ export async function saveMember(member) {
   }
 
   try {
-    const payload = buildMemberPayload(member, true);
+    const payload = buildMemberPayload(member, false);
 
     let response = await supabase
       .from("members")

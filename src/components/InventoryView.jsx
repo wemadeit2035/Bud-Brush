@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { saveProducts } from "../services/database";
+import { hasCapability } from "../constants/accessControl";
 
 const createEmptyBundle = () => ({
   id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
@@ -8,7 +9,12 @@ const createEmptyBundle = () => ({
   price: "",
 });
 
-export default function InventoryView({ products, setProducts, showToast }) {
+export default function InventoryView({
+  products,
+  setProducts,
+  showToast,
+  userRole,
+}) {
   const [search, setSearch] = useState("");
   const [editingProduct, setEditingProduct] = useState(null);
   const nameInputRef = useRef(null);
@@ -20,6 +26,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
     stock: "",
     bundles: [],
   });
+  const canManageCatalog = hasCapability(userRole, "manageCatalog");
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -115,6 +122,15 @@ export default function InventoryView({ products, setProducts, showToast }) {
   };
 
   const handleDelete = async (productId) => {
+    if (!canManageCatalog) {
+      showToast(
+        "Access denied",
+        "Only administrators can remove products.",
+        "error",
+      );
+      return;
+    }
+
     const updated = products.filter((product) => product.id !== productId);
     setProducts(updated);
     await saveProducts(updated);
@@ -123,6 +139,15 @@ export default function InventoryView({ products, setProducts, showToast }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (!canManageCatalog && !editingProduct) {
+      showToast(
+        "Access denied",
+        "Select an existing product to adjust stock.",
+        "error",
+      );
+      return;
+    }
 
     if (!formState.name || !formState.category || !formState.type) {
       showToast("Validation", "Please complete all fields.", "warning");
@@ -189,13 +214,15 @@ export default function InventoryView({ products, setProducts, showToast }) {
             />
             Stock Management
           </h2>
-          <button
-            type="button"
-            className="rounded-3xl bg-emerald-600 px-4 py-2 text-sm text-white"
-            onClick={resetForm}
-          >
-            Add Product
-          </button>
+          {canManageCatalog && (
+            <button
+              type="button"
+              className="rounded-3xl bg-emerald-600 px-4 py-2 text-sm text-white"
+              onClick={resetForm}
+            >
+              Add Product
+            </button>
+          )}
         </div>
         <div className="mb-4">
           <input
@@ -252,13 +279,15 @@ export default function InventoryView({ products, setProducts, showToast }) {
                 >
                   Edit
                 </button>
-                <button
-                  type="button"
-                  className="flex-1 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
-                  onClick={() => handleDelete(product.id)}
-                >
-                  Delete
-                </button>
+                {canManageCatalog && (
+                  <button
+                    type="button"
+                    className="flex-1 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+                    onClick={() => handleDelete(product.id)}
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -319,13 +348,15 @@ export default function InventoryView({ products, setProducts, showToast }) {
                       >
                         Edit
                       </button>
-                      <button
-                        type="button"
-                        className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
-                        onClick={() => handleDelete(product.id)}
-                      >
-                        Delete
-                      </button>
+                      {canManageCatalog && (
+                        <button
+                          type="button"
+                          className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+                          onClick={() => handleDelete(product.id)}
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -336,7 +367,9 @@ export default function InventoryView({ products, setProducts, showToast }) {
       </div>
       <div className="rounded-3xl bg-white p-4 shadow-sm border border-slate-200 sm:p-6">
         <div className="mb-6">
-          <h2 className="text-lg font-semibold">Add / Edit Product</h2>
+          <h2 className="text-lg font-semibold">
+            {canManageCatalog ? "Add / Edit Product" : "Adjust Stock"}
+          </h2>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -348,6 +381,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
               ref={nameInputRef}
               className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3"
               value={formState.name}
+              disabled={!canManageCatalog}
               onChange={(event) =>
                 setFormState({ ...formState, name: event.target.value })
               }
@@ -363,6 +397,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
                 type="text"
                 className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3"
                 value={formState.category}
+                disabled={!canManageCatalog}
                 onChange={(event) =>
                   setFormState({ ...formState, category: event.target.value })
                 }
@@ -377,6 +412,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
                 type="text"
                 className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3"
                 value={formState.type}
+                disabled={!canManageCatalog}
                 onChange={(event) =>
                   setFormState({ ...formState, type: event.target.value })
                 }
@@ -395,6 +431,7 @@ export default function InventoryView({ products, setProducts, showToast }) {
                 min="0"
                 className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3"
                 value={formState.price}
+                disabled={!canManageCatalog}
                 onChange={(event) =>
                   setFormState({ ...formState, price: event.target.value })
                 }
@@ -417,108 +454,112 @@ export default function InventoryView({ products, setProducts, showToast }) {
               />
             </div>
           </div>
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <label className="text-sm font-semibold text-slate-700">
-                Bundle Rules
-              </label>
-              <button
-                type="button"
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
-                onClick={addBundleField}
-              >
-                Add Bundle
-              </button>
-            </div>
-            <div className="mb-3 text-xs text-slate-500">
-              These rules are applied automatically in cart totals.
-            </div>
-            <div className="space-y-3">
-              {formState.bundles.length === 0 ? (
-                <div className="text-xs text-slate-500">
-                  No bundle rules yet. Add one to offer deals like 3 for R150.
-                </div>
-              ) : (
-                formState.bundles.map((bundle, index) => (
-                  <div
-                    key={bundle.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-3"
-                  >
-                    <div className="mb-2 text-xs font-semibold text-slate-500">
-                      Bundle {index + 1}
-                    </div>
-                    <div className="grid gap-2 md:grid-cols-3">
-                      <input
-                        type="text"
-                        placeholder="Bundle name (optional)"
-                        className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                        value={bundle.name}
-                        onChange={(event) =>
-                          updateBundleField(
-                            bundle.id,
-                            "name",
-                            event.target.value,
-                          )
-                        }
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Qty"
-                        className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                        value={bundle.qty}
-                        onChange={(event) =>
-                          updateBundleField(
-                            bundle.id,
-                            "qty",
-                            event.target.value,
-                          )
-                        }
-                      />
-                      <div className="flex gap-2">
+          {canManageCatalog && (
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <label className="text-sm font-semibold text-slate-700">
+                  Bundle Rules
+                </label>
+                <button
+                  type="button"
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+                  onClick={addBundleField}
+                >
+                  Add Bundle
+                </button>
+              </div>
+              <div className="mb-3 text-xs text-slate-500">
+                These rules are applied automatically in cart totals.
+              </div>
+              <div className="space-y-3">
+                {formState.bundles.length === 0 ? (
+                  <div className="text-xs text-slate-500">
+                    No bundle rules yet. Add one to offer deals like 3 for R150.
+                  </div>
+                ) : (
+                  formState.bundles.map((bundle, index) => (
+                    <div
+                      key={bundle.id}
+                      className="rounded-2xl border border-slate-200 bg-white p-3"
+                    >
+                      <div className="mb-2 text-xs font-semibold text-slate-500">
+                        Bundle {index + 1}
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-3">
                         <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="Bundle price"
-                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                          value={bundle.price}
+                          type="text"
+                          placeholder="Bundle name (optional)"
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                          value={bundle.name}
                           onChange={(event) =>
                             updateBundleField(
                               bundle.id,
-                              "price",
+                              "name",
                               event.target.value,
                             )
                           }
                         />
-                        <button
-                          type="button"
-                          className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
-                          onClick={() => removeBundleField(bundle.id)}
-                        >
-                          Remove
-                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Qty"
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                          value={bundle.qty}
+                          onChange={(event) =>
+                            updateBundleField(
+                              bundle.id,
+                              "qty",
+                              event.target.value,
+                            )
+                          }
+                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="Bundle price"
+                            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                            value={bundle.price}
+                            onChange={(event) =>
+                              updateBundleField(
+                                bundle.id,
+                                "price",
+                                event.target.value,
+                              )
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+                            onClick={() => removeBundleField(bundle.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
           <div className="flex gap-3">
             <button
               type="submit"
               className="w-full rounded-3xl bg-emerald-600 px-4 py-3 text-white"
             >
-              Save Product
+              {canManageCatalog ? "Save Product" : "Save Stock"}
             </button>
-            <button
-              type="button"
-              className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-700"
-              onClick={resetForm}
-            >
-              Reset
-            </button>
+            {canManageCatalog && (
+              <button
+                type="button"
+                className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-700"
+                onClick={resetForm}
+              >
+                Reset
+              </button>
+            )}
           </div>
         </form>
       </div>

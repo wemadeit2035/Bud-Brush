@@ -5,6 +5,7 @@ import {
   saveMember,
   saveMemberConsent,
 } from "../services/database";
+import { hasCapability } from "../constants/accessControl";
 
 const CONSENT_VERSION = "v1.0";
 
@@ -35,9 +36,10 @@ export default function MembersView({
   setMembers,
   transactions = [],
   showToast,
+  user,
+  userRole,
 }) {
   const [search, setSearch] = useState("");
-  const [staffUser, setStaffUser] = useState("");
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState(null);
   const memberDetailsRef = useRef(null);
@@ -176,15 +178,13 @@ export default function MembersView({
         status: "active",
         consentVersion: CONSENT_VERSION,
         consentSignedAt: new Date().toISOString(),
-        createdBy: staffUser.trim() || "pos-staff",
-        updatedBy: staffUser.trim() || "pos-staff",
       });
 
       await saveMemberConsent({
         memberId: savedMember.id,
         consentVersion: CONSENT_VERSION,
         signedAt: new Date().toISOString(),
-        signedByStaff: staffUser.trim() || "pos-staff",
+        signedByStaff: user?.id || null,
         formSnapshot: {
           firstName,
           lastName,
@@ -222,6 +222,15 @@ export default function MembersView({
   };
 
   const handleRemoveMember = async (member) => {
+    if (!hasCapability(userRole, "deleteMembers")) {
+      showToast(
+        "Access denied",
+        "Only administrators can remove members.",
+        "error",
+      );
+      return;
+    }
+
     const confirmed = window.confirm(
       `Remove ${member.firstName} ${member.lastName} (${member.membershipNumber})? This cannot be undone.`,
     );
@@ -304,13 +313,6 @@ export default function MembersView({
                 updateFormField("dateOfBirth", event.target.value)
               }
             />
-            <input
-              type="text"
-              placeholder="Staff username for audit"
-              className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3"
-              value={staffUser}
-              onChange={(event) => setStaffUser(event.target.value)}
-            />
           </div>
 
           <label className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
@@ -387,13 +389,15 @@ export default function MembersView({
                   >
                     {selectedMemberId === member.id ? "Hide" : "View"}
                   </button>
-                  <button
-                    type="button"
-                    className="rounded-full bg-rose-50 px-4 py-2 text-sm text-rose-700 hover:bg-rose-100"
-                    onClick={() => handleRemoveMember(member)}
-                  >
-                    Remove
-                  </button>
+                  {hasCapability(userRole, "deleteMembers") && (
+                    <button
+                      type="button"
+                      className="rounded-full bg-rose-50 px-4 py-2 text-sm text-rose-700 hover:bg-rose-100"
+                      onClick={() => handleRemoveMember(member)}
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
