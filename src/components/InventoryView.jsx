@@ -122,15 +122,6 @@ export default function InventoryView({
   };
 
   const handleDelete = async (productId) => {
-    if (!canManageCatalog) {
-      showToast(
-        "Access denied",
-        "Only administrators can remove products.",
-        "error",
-      );
-      return;
-    }
-
     const updated = products.filter((product) => product.id !== productId);
     setProducts(updated);
     await saveProducts(updated);
@@ -139,15 +130,6 @@ export default function InventoryView({
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    if (!canManageCatalog && !editingProduct) {
-      showToast(
-        "Access denied",
-        "Select an existing product to adjust stock.",
-        "error",
-      );
-      return;
-    }
 
     if (!formState.name || !formState.category || !formState.type) {
       showToast("Validation", "Please complete all fields.", "warning");

@@ -15,7 +15,7 @@ export const VIEW_ACCESS = Object.freeze({
 
 export const CAPABILITIES = Object.freeze({
   manageAccounts: [ROLES.ADMIN],
-  manageCatalog: [ROLES.ADMIN],
+  manageCatalog: [ROLES.ADMIN, ROLES.STAFF],
   adjustStock: [ROLES.ADMIN, ROLES.STAFF],
   createOrUpdateMembers: [ROLES.ADMIN, ROLES.STAFF],
   deleteMembers: [ROLES.ADMIN],

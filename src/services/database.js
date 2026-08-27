@@ -313,19 +313,7 @@ export async function saveProducts(products) {
   if (!supabase) throw new Error("Supabase is required for product data.");
 
   const role = await getAuthenticatedRole(supabase);
-  if (role === "staff") {
-    for (const product of normalizedProducts) {
-      const { error } = await supabase.rpc("adjust_product_stock", {
-        product_id: product.id,
-        new_stock: product.stock,
-      });
-
-      if (error) throw error;
-    }
-    return true;
-  }
-
-  if (role !== "admin") {
+  if (role !== "admin" && role !== "staff") {
     throw new Error("You are not allowed to manage products.");
   }
 

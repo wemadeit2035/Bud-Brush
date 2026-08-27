@@ -142,9 +142,11 @@ drop policy if exists products_read_staff_or_admin on public.products;
 create policy products_read_staff_or_admin on public.products
 for select to authenticated using (public.is_staff_or_admin());
 
-drop policy if exists products_write_admin on public.products;
-create policy products_write_admin on public.products
-for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists products_write_staff_or_admin on public.products;
+create policy products_write_staff_or_admin on public.products
+for all to authenticated   
+using (public.is_staff_or_admin())
+with check (public.is_staff_or_admin());
 
 create or replace function public.adjust_product_stock(product_id text, new_stock integer)
 returns void
