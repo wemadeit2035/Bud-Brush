@@ -10,6 +10,7 @@ import {
   saveProducts,
   deleteTransaction as deleteTransactionFromDb,
 } from "../services/database";
+import { hasCapability } from "../constants/accessControl";
 
 export default function SalesView({
   products,
@@ -19,6 +20,7 @@ export default function SalesView({
   showToast,
   dailyAdjustments = [],
   setDailyAdjustments,
+  userRole,
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -26,6 +28,8 @@ export default function SalesView({
   const [adjustmentAmount, setAdjustmentAmount] = useState("0");
   const [adjustmentNote, setAdjustmentNote] = useState("");
   const [showAdjustment, setShowAdjustment] = useState(false);
+  const canEditTransactions = hasCapability(userRole, "editTransactions");
+  const canDeleteTransactions = hasCapability(userRole, "deleteTransactions");
 
   const parsedAdjustmentAmount = useMemo(() => {
     const amount = Number(adjustmentAmount);
@@ -258,6 +262,7 @@ export default function SalesView({
   };
 
   const handleEditClick = (transaction) => {
+    if (!canEditTransactions) return;
     setEditingTransaction(transaction);
   };
 
@@ -271,6 +276,15 @@ export default function SalesView({
   };
 
   const handleDeleteTransaction = async (transactionId) => {
+    if (!canDeleteTransactions) {
+      showToast(
+        "Access denied",
+        "Only administrators can delete transactions.",
+        "error",
+      );
+      return;
+    }
+
     try {
       const transaction = transactions.find((tx) => tx.id === transactionId);
 
@@ -457,12 +471,14 @@ export default function SalesView({
                           >
                             Edit
                           </button>
-                          <button
-                            className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 hover:bg-rose-100"
-                            onClick={() => handleDeleteTransaction(tx.id)}
-                          >
-                            Delete
-                          </button>
+                          {canDeleteTransactions && (
+                            <button
+                              className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 hover:bg-rose-100"
+                              onClick={() => handleDeleteTransaction(tx.id)}
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

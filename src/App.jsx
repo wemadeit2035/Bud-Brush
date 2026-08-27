@@ -470,9 +470,11 @@ function App() {
                 products={products}
                 transactions={transactions}
                 setTransactions={setTransactions}
+                setProducts={setProducts}
                 dailyAdjustments={dailyAdjustments}
                 setDailyAdjustments={setDailyAdjustments}
                 showToast={showToast}
+                userRole={userRole}
               />
             )}
             {activeView === "dashboard" &&

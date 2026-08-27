@@ -181,9 +181,11 @@ drop policy if exists transactions_insert_staff_or_admin on public.transactions;
 create policy transactions_insert_staff_or_admin on public.transactions
 for insert to authenticated with check (public.is_staff_or_admin());
 
-drop policy if exists transactions_change_admin on public.transactions;
-create policy transactions_change_admin on public.transactions
-for update to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists transactions_change_staff_or_admin on public.transactions;
+create policy transactions_change_staff_or_admin on public.transactions
+for update to authenticated
+using (public.is_staff_or_admin())
+with check (public.is_staff_or_admin());
 
 drop policy if exists transactions_delete_admin on public.transactions;
 create policy transactions_delete_admin on public.transactions
@@ -197,13 +199,15 @@ drop policy if exists transaction_items_insert_staff_or_admin on public.transact
 create policy transaction_items_insert_staff_or_admin on public.transaction_items
 for insert to authenticated with check (public.is_staff_or_admin());
 
-drop policy if exists transaction_items_change_admin on public.transaction_items;
-create policy transaction_items_change_admin on public.transaction_items
-for update to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists transaction_items_change_staff_or_admin on public.transaction_items;
+create policy transaction_items_change_staff_or_admin on public.transaction_items
+for update to authenticated
+using (public.is_staff_or_admin())
+with check (public.is_staff_or_admin());
 
-drop policy if exists transaction_items_delete_admin on public.transaction_items;
-create policy transaction_items_delete_admin on public.transaction_items
-for delete to authenticated using (public.is_admin());
+drop policy if exists transaction_items_delete_staff_or_admin on public.transaction_items;
+create policy transaction_items_delete_staff_or_admin on public.transaction_items
+for delete to authenticated using (public.is_staff_or_admin());
 
 drop policy if exists members_select_authenticated on public.members;
 drop policy if exists members_select_anon on public.members;

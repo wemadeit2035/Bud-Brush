@@ -14,15 +14,10 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
-function createTemporaryPassword() {
-  return String((crypto.getRandomValues(new Uint32Array(1))[0] % 9000) + 1000);
-}
-
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
-
   if (request.method !== "POST") {
     return jsonResponse({ error: "Method not allowed." }, 405);
   }
@@ -31,7 +26,6 @@ Deno.serve(async (request) => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const authorization = request.headers.get("Authorization");
-
   if (!supabaseUrl || !anonKey || !serviceRoleKey || !authorization) {
     return jsonResponse({ error: "Unauthorized." }, 401);
   }
@@ -43,7 +37,6 @@ Deno.serve(async (request) => {
   const token = authorization.replace(/^Bearer\s+/i, "");
   const { data: callerData, error: callerError } =
     await adminClient.auth.getUser(token);
-
   if (callerError || !callerData.user) {
     return jsonResponse({ error: "Unauthorized." }, 401);
   }
@@ -53,70 +46,32 @@ Deno.serve(async (request) => {
     .select("role")
     .eq("user_id", callerData.user.id)
     .maybeSingle();
-
   if (roleError || callerRole?.role !== "admin") {
     return jsonResponse({ error: "Administrator access is required." }, 403);
   }
 
-  let body: { email?: string; role?: string };
+  let body: { userId?: string };
   try {
     body = await request.json();
   } catch {
     return jsonResponse({ error: "Invalid request body." }, 400);
   }
 
-  const email = String(body.email || "")
-    .trim()
-    .toLowerCase();
-  const role = String(body.role || "").trim();
-  if (!/^\S+@\S+\.\S+$/.test(email) || !["admin", "staff"].includes(role)) {
-    return jsonResponse(
-      { error: "Provide a valid email and access level." },
-      400,
-    );
+  const userId = String(body.userId || "").trim();
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(userId)) {
+    return jsonResponse({ error: "Invalid account identifier." }, 400);
+  }
+  if (userId === callerData.user.id) {
+    return jsonResponse({ error: "You cannot remove your own account." }, 400);
   }
 
-  const temporaryPassword = createTemporaryPassword();
-  const { data: createdUser, error: createUserError } =
-    await adminClient.auth.admin.createUser({
-      email,
-      password: temporaryPassword,
-      email_confirm: true,
-    });
-
-  if (createUserError || !createdUser.user) {
-    return jsonResponse(
-      { error: createUserError?.message || "Unable to create account." },
-      400,
-    );
-  }
-
-  const userId = createdUser.user.id;
-  const { error: metadataError } = await adminClient.from("user_roles").insert({
-    user_id: userId,
-    role,
-  });
-  const { error: accountError } = metadataError
-    ? { error: metadataError }
-    : await adminClient.from("staff_accounts").insert({
-        user_id: userId,
-        email,
-        role,
-        created_by: callerData.user.id,
-      });
-
-  if (accountError) {
+  const { error: deleteError } =
     await adminClient.auth.admin.deleteUser(userId);
-    return jsonResponse({ error: "Unable to assign account access." }, 500);
+  if (deleteError) {
+    return jsonResponse({ error: deleteError.message }, 400);
   }
 
-  return jsonResponse(
-    {
-      userId,
-      email,
-      role,
-      temporaryPassword,
-    },
-    201,
-  );
+  return jsonResponse({ userId });
 });

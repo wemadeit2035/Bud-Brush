@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { createStaffAccount, loadStaffAccounts } from "../services/database";
+import {
+  createStaffAccount,
+  deleteStaffAccount,
+  loadStaffAccounts,
+} from "../services/database";
 
 export default function StaffAccountsView({ showToast }) {
   const [accounts, setAccounts] = useState([]);
@@ -47,6 +51,30 @@ export default function StaffAccountsView({ showToast }) {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRemove = async (account) => {
+    if (
+      !window.confirm(
+        `Remove access for ${account.email}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await deleteStaffAccount(account.user_id);
+      setAccounts((current) =>
+        current.filter((item) => item.user_id !== account.user_id),
+      );
+      showToast("Account removed", `Removed ${account.email}.`, "success");
+    } catch (error) {
+      showToast(
+        "Account not removed",
+        error.message || "Unable to remove the account.",
+        "error",
+      );
     }
   };
 
@@ -112,6 +140,13 @@ export default function StaffAccountsView({ showToast }) {
                 <span className="rounded-full bg-sky-100 px-3 py-1 capitalize text-sky-800">
                   {account.role}
                 </span>
+                <button
+                  type="button"
+                  className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-rose-700 hover:bg-rose-100"
+                  onClick={() => handleRemove(account)}
+                >
+                  Remove
+                </button>
               </div>
             ))}
           </div>

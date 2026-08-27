@@ -106,6 +106,19 @@ export async function createStaffAccount(email, role) {
   return data;
 }
 
+export async function deleteStaffAccount(userId) {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error("Supabase is required for account removal.");
+
+  const { data, error } = await supabase.functions.invoke(
+    "delete-staff-account",
+    { body: { userId } },
+  );
+
+  if (error) throw error;
+  return data;
+}
+
 async function getAuthenticatedRole(supabase) {
   const { data, error } = await supabase.auth.getUser();
   if (error) throw error;

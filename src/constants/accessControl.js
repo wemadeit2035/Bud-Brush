@@ -7,7 +7,7 @@ export const VIEW_ACCESS = Object.freeze({
   pos: [ROLES.ADMIN, ROLES.STAFF],
   members: [ROLES.ADMIN, ROLES.STAFF],
   inventory: [ROLES.ADMIN, ROLES.STAFF],
-  sales: [ROLES.ADMIN],
+  sales: [ROLES.ADMIN, ROLES.STAFF],
   dashboard: [ROLES.ADMIN],
   archive: [ROLES.ADMIN],
   staffAccounts: [ROLES.ADMIN],
@@ -20,7 +20,8 @@ export const CAPABILITIES = Object.freeze({
   createOrUpdateMembers: [ROLES.ADMIN, ROLES.STAFF],
   deleteMembers: [ROLES.ADMIN],
   createTransactions: [ROLES.ADMIN, ROLES.STAFF],
-  editOrDeleteTransactions: [ROLES.ADMIN],
+  editTransactions: [ROLES.ADMIN, ROLES.STAFF],
+  deleteTransactions: [ROLES.ADMIN],
   manageArchives: [ROLES.ADMIN],
 });
 
